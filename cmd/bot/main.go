@@ -1,9 +1,15 @@
 package main
 
 import (
+	"context"
+	"os/signal"
+	"syscall"
+	"time"
+
 	"go.uber.org/zap"
 
 	"github.com/mrPTqp/total-recaller/internal/config"
+	"github.com/mrPTqp/total-recaller/internal/app"
 	"github.com/mrPTqp/total-recaller/pkg/logger"
 )
 
@@ -27,5 +33,26 @@ func main() {
 		_ = log.Sync()
 	}()
 
-	log.Info("Total Recaller application is running")
+	bootstrapper := app.NewBootstrapper(cfg, log)
+
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
+	defer stop()
+
+	if components, err := bootstrapper.MustRun(ctx); err != nil {
+		log.Fatal("failed to bootstrap application", zap.Error(err))
+	}
+
+	application := app.NewApp(components)
+
+	go application.RunWithContext(ctx)
+	log.Info("application started")
+
+	<-ctx.Done()
+	log.Info("shutdown signal received")
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	application.Shutdown(shutdownCtx)
+	log.Info("application stopped")
 }

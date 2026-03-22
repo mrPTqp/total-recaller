@@ -131,3 +131,7 @@ $RECYCLE.BIN/
 *.exe
 bot.exe
 
+# App config
+config.yaml
+config.yml
+config.json
