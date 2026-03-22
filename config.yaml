@@ -1,2 +1,7 @@
 bot:
-  username: config_file_bot
+  username: "total_recaller_bot"
+  pool_size: 10
+  max_queue_size: 100
+
+# Переменные окружения:
+# TOTAL_RECALLER_BOT_TOKEN - токен Telegram бота

@@ -11,7 +11,9 @@ import (
 // application configuration
 type Config struct {
 	Bot struct {
-		Username string `mapstructure:"username"`
+		Username     string `mapstructure:"username"`
+		PoolSize     int    `mapstructure:"pool_size"`   
+		MaxQueueSize int    `mapstructure:"max_queue_size"` 
 	} `mapstructure:"bot"`
 	// Sensitive data loaded only from environment variables
 	BotToken string `mapstructure:"-"`
@@ -75,6 +77,8 @@ func loadEnvironment(v *viper.Viper) {
 // sets default values for configuration
 func setDefaults(v *viper.Viper) {
 	v.SetDefault("bot.username", "")
+	v.SetDefault("bot.pool_size", 10)      
+	v.SetDefault("bot.max_queue_size", 100) 
 }
 
 // validates configuration

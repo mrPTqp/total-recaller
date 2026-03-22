@@ -5,12 +5,15 @@ go 1.24.7
 require go.uber.org/zap v1.27.1
 
 require (
+	github.com/gammazero/workerpool v1.2.1
 	github.com/spf13/pflag v1.0.6
 	github.com/spf13/viper v1.20.1
+	gopkg.in/telebot.v3 v3.3.8
 )
 
 require (
 	github.com/fsnotify/fsnotify v1.8.0 // indirect
+	github.com/gammazero/deque v1.2.1 // indirect
 	github.com/go-viper/mapstructure/v2 v2.2.1 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.3 // indirect
 	github.com/sagikazarmark/locafero v0.7.0 // indirect

@@ -38,7 +38,8 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 	defer stop()
 
-	if components, err := bootstrapper.MustRun(ctx); err != nil {
+	components, err := bootstrapper.MustRun(ctx)
+	if err != nil {
 		log.Fatal("failed to bootstrap application", zap.Error(err))
 	}
 
