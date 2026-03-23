@@ -1,33 +1,63 @@
 package handlers
 
 import (
+	"context"
+	"database/sql"
+	"errors"
 	"fmt"
+	"strconv"
+	"strings"
+	"time"
+
 	"github.com/gammazero/workerpool"
 	"github.com/mrPTqp/total-recaller/internal/config"
+	"github.com/mrPTqp/total-recaller/internal/service"
 	"go.uber.org/zap"
 	tele "gopkg.in/telebot.v3"
 )
 
 type CommandHandlers struct {
-	bot        *tele.Bot
-	cfg        *config.Config
-	logger     *zap.Logger
-	workerPool *workerpool.WorkerPool
+	bot            *tele.Bot
+	cfg            *config.Config
+	logger         *zap.Logger
+	wp             *workerpool.WorkerPool
+	meetingService *service.MeetingService
+	userService    *service.UserService
 }
 
-func NewCommandHandlers(bot *tele.Bot, cfg *config.Config, logger *zap.Logger, workerPool *workerpool.WorkerPool) *CommandHandlers {
+func NewCommandHandlers(
+	bot *tele.Bot,
+	cfg *config.Config,
+	logger *zap.Logger,
+	wp *workerpool.WorkerPool,
+	meetingService *service.MeetingService,
+	userService *service.UserService,
+) *CommandHandlers {
 	return &CommandHandlers{
-		bot:        bot,
-		cfg:        cfg,
-		logger:     logger,
-		workerPool: workerPool,
+		bot:            bot,
+		cfg:            cfg,
+		logger:         logger,
+		wp:             wp,
+		meetingService: meetingService,
+		userService:    userService,
 	}
 }
 
 func (h *CommandHandlers) HandleStart(ctx tele.Context) error {
 	user := ctx.Sender()
 
-	h.logger.Info("User started bot", zap.String("username", user.Username))
+	h.wp.Submit(func() {
+		ctxWithTimeout, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		err := h.userService.RegisterUser(ctxWithTimeout, user.ID, user.Username, user.FirstName, user.LastName, h.logger)
+		if err != nil {
+			h.logger.Error("Failed to register user", zap.Int64("telegram_id", user.ID), zap.Error(err))
+			return
+		}
+
+		h.logger.Info("User started bot", zap.String("username", user.Username))
+	})
 
 	message := fmt.Sprintf(
 		"Привет, %s! 👋\n\n"+
@@ -45,8 +75,31 @@ func (h *CommandHandlers) HandleStart(ctx tele.Context) error {
 }
 
 func (h *CommandHandlers) HandleList(ctx tele.Context) error {
-	message := "Список встреч:\n\n1. Встреча с командой разработки (2024-01-15)\n2. Совещание по проекту (2024-01-10)"
-	return ctx.Send(message)
+	h.wp.Submit(func() {
+		ctxWithTimeout, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		meetings, err := h.meetingService.ListMeetings(ctxWithTimeout, ctx.Sender().ID, h.logger)
+		if err != nil {
+			h.logger.Error("Failed to list meetings", zap.Error(err))
+			return
+		}
+
+		if len(meetings) == 0 {
+			return
+		}
+
+		var message strings.Builder
+		message.WriteString("Список встреч:\n\n")
+		for i, meeting := range meetings {
+			fmt.Fprintf(&message, "%d. %s (ID: %d)\n", i+1,
+				meeting.CreatedAt.Format("2006-01-02 15:04"), meeting.ID)
+		}
+
+		ctx.Send(message.String())
+	})
+
+	return nil
 }
 
 func (h *CommandHandlers) HandleGet(ctx tele.Context) error {
@@ -55,20 +108,68 @@ func (h *CommandHandlers) HandleGet(ctx tele.Context) error {
 		return ctx.Send("Пожалуйста, укажите ID встречи. Пример: /get 1")
 	}
 
-	meetingID := args[0]
-	message := fmt.Sprintf("Транскрипция встречи %s:\n\n[Текст транскрипции]", meetingID)
-	return ctx.Send(message)
+	meetingID, err := strconv.Atoi(args[0])
+	if err != nil {
+		return ctx.Send("Некорректный ID встречи")
+	}
+
+	h.wp.Submit(func() {
+		ctxWithTimeout, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		meeting, err := h.meetingService.GetMeeting(ctxWithTimeout, meetingID, ctx.Sender().ID, h.logger)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				ctx.Send("Встреча не найдена")
+				return
+			}
+			h.logger.Error("Failed to get meeting", zap.Int("id", meetingID), zap.Error(err))
+			ctx.Send("Ошибка при получении транскрипции")
+			return
+		}
+
+		message := fmt.Sprintf("Транскрипция встречи %d:\n\n%s", meetingID, meeting.FullText)
+		ctx.Send(message)
+	})
+
+	return nil
 }
 
 func (h *CommandHandlers) HandleFind(ctx tele.Context) error {
 	args := ctx.Args()
 	if len(args) == 0 {
-		return ctx.Send("Пожалуйста, укажите ключевые слова для поиска. Пример: /find проект")
+		return ctx.Send("Пожалуйста, укажите ключевые слова для поиска. Пример: /find интеграция с гигачат")
 	}
 
-	keywords := ctx.Text()[5:]
-	message := fmt.Sprintf("Результаты поиска по запросу '%s':\n\n1. Встреча с командой (2024-01-15)\n2. Совещание (2024-01-10)", keywords)
-	return ctx.Send(message)
+	query := strings.Join(args, " ")
+
+	h.wp.Submit(func() {
+		ctxWithTimeout, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		meetings, err := h.meetingService.SearchMeetings(ctxWithTimeout, ctx.Sender().ID, query, 100, 0, h.logger)
+		if err != nil {
+			h.logger.Error("Failed to search meetings", zap.String("query", query), zap.Error(err))
+			ctx.Send("Ошибка при поиске встреч")
+			return
+		}
+
+		if len(meetings) == 0 {
+			ctx.Send("По вашему запросу ничего не найдено")
+			return
+		}
+
+		var message strings.Builder
+		message.WriteString("Результаты поиска:\n\n")
+		for i, meeting := range meetings {
+			fmt.Fprintf(&message, "%d. %s (ID: %d)\n", i+1,
+				meeting.CreatedAt.Format("2006-01-02 15:04"), meeting.ID)
+		}
+
+		ctx.Send(message.String())
+	})
+
+	return nil
 }
 
 func (h *CommandHandlers) HandleChat(ctx tele.Context) error {
@@ -78,6 +179,11 @@ func (h *CommandHandlers) HandleChat(ctx tele.Context) error {
 	}
 
 	question := ctx.Text()[5:]
-	message := fmt.Sprintf("Анализирую ваш вопрос: '%s'\n\n[Ответ от GigaChat]", question)
-	return ctx.Send(message)
+
+	h.wp.Submit(func() {
+		message := fmt.Sprintf("Анализирую ваш вопрос: '%s'\n\n[Ответ от GigaChat]", question)
+		ctx.Send(message)
+	})
+
+	return nil
 }

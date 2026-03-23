@@ -8,18 +8,18 @@ import (
 )
 
 type EventHandlers struct {
-	bot        *tele.Bot
-	cfg        *config.Config
-	logger     *zap.Logger
-	workerPool *workerpool.WorkerPool
+	bot    *tele.Bot
+	cfg    *config.Config
+	logger *zap.Logger
+	wp     *workerpool.WorkerPool
 }
 
 func NewEventHandlers(bot *tele.Bot, cfg *config.Config, logger *zap.Logger, workerPool *workerpool.WorkerPool) *EventHandlers {
 	return &EventHandlers{
-		bot:        bot,
-		cfg:        cfg,
-		logger:     logger,
-		workerPool: workerPool,
+		bot:    bot,
+		cfg:    cfg,
+		logger: logger,
+		wp:     workerPool,
 	}
 }
 
@@ -47,7 +47,7 @@ func (h *EventHandlers) HandleVoice(ctx tele.Context) error {
 		}
 	}
 
-	h.workerPool.Submit(task)
+	h.wp.Submit(task)
 
 	return nil
 }
@@ -76,7 +76,7 @@ func (h *EventHandlers) HandleAudio(ctx tele.Context) error {
 		}
 	}
 
-	h.workerPool.Submit(task)
+	h.wp.Submit(task)
 
 	return nil
 }

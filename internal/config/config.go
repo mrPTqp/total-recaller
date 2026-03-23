@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
@@ -15,8 +16,21 @@ type Config struct {
 		PoolSize     int    `mapstructure:"pool_size"`   
 		MaxQueueSize int    `mapstructure:"max_queue_size"` 
 	} `mapstructure:"bot"`
+	Database struct {
+		Retry struct {
+			MaxAttempts int           `mapstructure:"max_attempts"`
+			Backoff     time.Duration `mapstructure:"backoff"`
+		} `mapstructure:"retry"`
+		Pool struct {
+			MaxOpenConns    int           `mapstructure:"max_open_conns"`
+			MaxIdleConns    int           `mapstructure:"max_idle_conns"`
+			MaxLifetime     time.Duration `mapstructure:"max_lifetime"`
+			MaxIdleTime     time.Duration `mapstructure:"max_idle_time"`
+		} `mapstructure:"pool"`
+	} `mapstructure:"database"`
 	// Sensitive data loaded only from environment variables
 	BotToken string `mapstructure:"-"`
+	DatabaseDSN string `mapstructure:"-"`
 }
 
 func LoadConfig() (*Config, error) {
@@ -34,6 +48,7 @@ func LoadConfig() (*Config, error) {
 	}
 	
 	cfg.BotToken = v.GetString("BOT_TOKEN")
+	cfg.DatabaseDSN = v.GetString("DATABASE_DSN")
 	
 	if err := validateConfig(&cfg); err != nil {
 		return nil, fmt.Errorf("configuration validation failed: %w", err)
@@ -79,6 +94,12 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("bot.username", "")
 	v.SetDefault("bot.pool_size", 10)      
 	v.SetDefault("bot.max_queue_size", 100) 
+	v.SetDefault("database.retry.max_attempts", 3)
+	v.SetDefault("database.retry.backoff", "1s") // time.Duration format
+	v.SetDefault("database.pool.max_open_conns", 25)
+	v.SetDefault("database.pool.max_idle_conns", 5)
+	v.SetDefault("database.pool.max_lifetime", "5m")
+	v.SetDefault("database.pool.max_idle_time", "1m")
 }
 
 // validates configuration
@@ -87,7 +108,10 @@ func validateConfig(cfg *Config) error {
 		return fmt.Errorf("bot username is required")
 	}
 	if cfg.BotToken == "" {
-		return fmt.Errorf("bot token is required and must be set via TOTAL_RECALLER_BOT_TOKEN environment variable")
+		return fmt.Errorf("bot token is required")
+	}
+	if cfg.DatabaseDSN == "" {
+		return fmt.Errorf("database DSN is required")
 	}
 	return nil
 }

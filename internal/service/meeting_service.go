@@ -1,0 +1,67 @@
+package service
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/mrPTqp/total-recaller/internal/models"
+	"github.com/mrPTqp/total-recaller/internal/storage"
+	"go.uber.org/zap"
+)
+
+type MeetingService struct {
+	repo   storage.MeetingRepository
+	logger *zap.Logger
+}
+
+func NewMeetingService(repo storage.MeetingRepository, logger *zap.Logger) *MeetingService {
+	return &MeetingService{
+		repo:   repo,
+		logger: logger,
+	}
+}
+
+func (s *MeetingService) CreateMeeting(ctx context.Context, telegramID int64, audioURL string, logger *zap.Logger) (*models.Meeting, error) {
+	meeting := &models.Meeting{
+		TelegramID: telegramID,
+		AudioURL:   audioURL,
+		CreatedAt:  models.TimeNow(),
+	}
+
+	if err := s.repo.Create(ctx, meeting); err != nil {
+		logger.Error("Failed to create meeting", zap.Error(err))
+		return nil, fmt.Errorf("failed to create meeting: %w", err)
+	}
+
+	return meeting, nil
+}
+
+func (s *MeetingService) GetMeeting(ctx context.Context, id int, telegramID int64, logger *zap.Logger) (*models.Meeting, error) {
+	meeting, err := s.repo.GetByID(ctx, id, telegramID)
+	if err != nil {
+		logger.Error("Failed to get meeting", zap.Int("id", id), zap.Error(err))
+		return nil, fmt.Errorf("failed to get meeting: %w", err)
+	}
+
+	return meeting, nil
+}
+
+func (s *MeetingService) ListMeetings(ctx context.Context, telegramID int64, logger *zap.Logger) ([]models.Meeting, error) {
+	meetings, err := s.repo.ListByUser(ctx, telegramID, 100)
+	if err != nil {
+		logger.Error("Failed to list meetings", zap.Error(err))
+		return nil, fmt.Errorf("failed to list meetings: %w", err)
+	}
+
+	return meetings, nil
+}
+
+func (s *MeetingService) SearchMeetings(ctx context.Context, telegramID int64, query string, limit, offset int, logger *zap.Logger) ([]models.Meeting, error) {
+	meetings, err := s.repo.Search(ctx, telegramID, query, limit, offset)
+	if err != nil {
+		logger.Error("Failed to search meetings", zap.String("query", query), zap.Error(err))
+		return nil, fmt.Errorf("failed to search meetings: %w", err)
+	}
+
+	return meetings, nil
+}

@@ -7,12 +7,13 @@ import (
 	"github.com/gammazero/workerpool"
 	"github.com/mrPTqp/total-recaller/internal/bot/handlers"
 	"github.com/mrPTqp/total-recaller/internal/config"
+	"github.com/mrPTqp/total-recaller/internal/service"
 	"go.uber.org/zap"
-	tele "gopkg.in/telebot.v3"
+	telegramm "gopkg.in/telebot.v3"
 )
 
 type Client struct {
-	bot         *tele.Bot
+	bot         *telegramm.Bot
 	cfg         *config.Config
 	logger      *zap.Logger
 	workerPool  *workerpool.WorkerPool
@@ -20,21 +21,25 @@ type Client struct {
 	evtHandlers *handlers.EventHandlers
 }
 
-func NewClient(cfg *config.Config, logger *zap.Logger) (*Client, error) {
-	settings := tele.Settings{
+func NewClient(
+	cfg *config.Config,
+	logger *zap.Logger,
+	workerPool *workerpool.WorkerPool,
+	meetingService *service.MeetingService,
+	userService *service.UserService,
+) (*Client, error) {
+	settings := telegramm.Settings{
 		Token:  cfg.BotToken,
-		Poller: &tele.LongPoller{Timeout: 10 * time.Second},
+		Poller: &telegramm.LongPoller{Timeout: 10 * time.Second},
 	}
 
-	bot, err := tele.NewBot(settings)
+	bot, err := telegramm.NewBot(settings)
 	if err != nil {
 		logger.Fatal("Failed to create bot", zap.Error(err))
 		return nil, err
 	}
 
-	workerPool := workerpool.New(cfg.Bot.PoolSize)
-
-	cmdHandlers := handlers.NewCommandHandlers(bot, cfg, logger, workerPool)
+	cmdHandlers := handlers.NewCommandHandlers(bot, cfg, logger, workerPool, meetingService, userService)
 	evtHandlers := handlers.NewEventHandlers(bot, cfg, logger, workerPool)
 
 	client := &Client{
@@ -70,7 +75,7 @@ func (c *Client) registerCommandRoutes() {
 	c.bot.Handle("/find", c.cmdHandlers.HandleFind)
 	c.bot.Handle("/chat", c.cmdHandlers.HandleChat)
 
-	commands := []tele.Command{
+	commands := []telegramm.Command{
 		{Text: "start", Description: "Зарегистрироваться"},
 		{Text: "list", Description: "Получить список сохраненных встреч"},
 		{Text: "get", Description: "Получить текст конкретной встречи"},
@@ -82,6 +87,6 @@ func (c *Client) registerCommandRoutes() {
 }
 
 func (c *Client) registerEventRoutes() {
-	c.bot.Handle(tele.OnVoice, c.evtHandlers.HandleVoice)
-	c.bot.Handle(tele.OnAudio, c.evtHandlers.HandleAudio)
+	c.bot.Handle(telegramm.OnVoice, c.evtHandlers.HandleVoice)
+	c.bot.Handle(telegramm.OnAudio, c.evtHandlers.HandleAudio)
 }

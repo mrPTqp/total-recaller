@@ -6,6 +6,8 @@ require go.uber.org/zap v1.27.1
 
 require (
 	github.com/gammazero/workerpool v1.2.1
+	github.com/jmoiron/sqlx v1.4.0
+	github.com/lib/pq v1.12.0
 	github.com/spf13/pflag v1.0.6
 	github.com/spf13/viper v1.20.1
 	gopkg.in/telebot.v3 v3.3.8
