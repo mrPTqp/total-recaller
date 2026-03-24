@@ -25,7 +25,7 @@ func main() {
 	}
 
 	log.Info("Configuration successfully loaded",
-		zap.Any("config: ", cfg),
+		zap.String("config", cfg.String()),
 	)
 
 	log = logger.NewLogger()

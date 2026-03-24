@@ -115,3 +115,12 @@ func validateConfig(cfg *Config) error {
 	}
 	return nil
 }
+
+// String implements custom string representation for Config
+func (c *Config) String() string {
+	return fmt.Sprintf("Config{Bot: {Username: %s, PoolSize: %d, MaxQueueSize: %d}, Database: {Retry: {MaxAttempts: %d, Backoff: %s}, Pool: {MaxOpenConns: %d, MaxIdleConns: %d, MaxLifetime: %s, MaxIdleTime: %s}}}",
+		c.Bot.Username, c.Bot.PoolSize, c.Bot.MaxQueueSize,
+		c.Database.Retry.MaxAttempts, c.Database.Retry.Backoff,
+		c.Database.Pool.MaxOpenConns, c.Database.Pool.MaxIdleConns,
+		c.Database.Pool.MaxLifetime, c.Database.Pool.MaxIdleTime)
+}
