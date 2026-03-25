@@ -135,3 +135,6 @@ bot.exe
 config.yaml
 config.yml
 config.json
+
+# Temp directory
+temp/

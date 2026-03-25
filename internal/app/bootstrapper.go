@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"net/http"
 
 	"github.com/gammazero/workerpool"
 	"github.com/mrPTqp/total-recaller/internal/bot"
@@ -10,6 +11,7 @@ import (
 	"github.com/mrPTqp/total-recaller/internal/service"
 	"github.com/mrPTqp/total-recaller/internal/storage"
 	"github.com/mrPTqp/total-recaller/internal/storage/postgres"
+	"github.com/mrPTqp/total-recaller/internal/token"
 	"go.uber.org/zap"
 )
 
@@ -55,19 +57,27 @@ func (bs *Bootstrapper) MustRun(ctx context.Context) (*AppComponents, error) {
 		return nil, fmt.Errorf("failed to create bot client: %w", err)
 	}
 
+	httpClient := &http.Client{}
+
+	tokenManager := token.NewTokenManager(bs.cfg, httpClient)
+
 	components := &AppComponents{
-		Config:   bs.cfg,
-		Logger:   bs.logger,
-		Bot:      botClient,
-		Database: db,
+		Config:       bs.cfg,
+		Logger:       bs.logger,
+		Bot:          botClient,
+		Database:     db,
+		TokenManager: tokenManager,
+		HTTPClient:   httpClient,
 	}
 
 	return components, nil
 }
 
 type AppComponents struct {
-	Config   *config.Config
-	Logger   *zap.Logger
-	Bot      *bot.Client
-	Database *storage.Database
+	Config       *config.Config
+	Logger       *zap.Logger
+	Bot          *bot.Client
+	Database     *storage.Database
+	TokenManager *token.TokenManager
+	HTTPClient   *http.Client
 }

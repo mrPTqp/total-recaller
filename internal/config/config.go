@@ -13,8 +13,8 @@ import (
 type Config struct {
 	Bot struct {
 		Username     string `mapstructure:"username"`
-		PoolSize     int    `mapstructure:"pool_size"`   
-		MaxQueueSize int    `mapstructure:"max_queue_size"` 
+		PoolSize     int    `mapstructure:"pool_size"`
+		MaxQueueSize int    `mapstructure:"max_queue_size"`
 	} `mapstructure:"bot"`
 	Database struct {
 		Retry struct {
@@ -28,9 +28,17 @@ type Config struct {
 			MaxIdleTime     time.Duration `mapstructure:"max_idle_time"`
 		} `mapstructure:"pool"`
 	} `mapstructure:"database"`
+	Transcriber struct {
+		TokenManager struct {
+			Scope           string        `mapstructure:"scope"`
+			URL             string        `mapstructure:"url"`
+			RefreshInterval time.Duration `mapstructure:"refresh_interval"`
+		} `mapstructure:"token_manager"`
+	} `mapstructure:"transcriber"`
 	// Sensitive data loaded only from environment variables
 	BotToken string `mapstructure:"-"`
 	DatabaseDSN string `mapstructure:"-"`
+	TranscriberTokenManagerCredentials string `mapstructure:"-"`
 }
 
 func LoadConfig() (*Config, error) {
@@ -41,19 +49,20 @@ func LoadConfig() (*Config, error) {
 	loadConfigFile(v)
 	loadEnvironment(v)
 	loadFlags(v)
-	
+
 	var cfg Config
 	if err := v.Unmarshal(&cfg); err != nil {
 		return nil, fmt.Errorf("unable to decode into struct: %w", err)
 	}
-	
+
 	cfg.BotToken = v.GetString("BOT_TOKEN")
 	cfg.DatabaseDSN = v.GetString("DATABASE_DSN")
-	
+	cfg.TranscriberTokenManagerCredentials = v.GetString("TRANSCRIBER_TOKEN_MANAGER_CREDENTIALS")
+
 	if err := validateConfig(&cfg); err != nil {
 		return nil, fmt.Errorf("configuration validation failed: %w", err)
 	}
-	
+
 	return &cfg, nil
 }
 
@@ -92,14 +101,17 @@ func loadEnvironment(v *viper.Viper) {
 // sets default values for configuration
 func setDefaults(v *viper.Viper) {
 	v.SetDefault("bot.username", "")
-	v.SetDefault("bot.pool_size", 10)      
-	v.SetDefault("bot.max_queue_size", 100) 
+	v.SetDefault("bot.pool_size", 10)
+	v.SetDefault("bot.max_queue_size", 100)
 	v.SetDefault("database.retry.max_attempts", 3)
-	v.SetDefault("database.retry.backoff", "1s") // time.Duration format
+	v.SetDefault("database.retry.backoff", "1s")
 	v.SetDefault("database.pool.max_open_conns", 25)
 	v.SetDefault("database.pool.max_idle_conns", 5)
 	v.SetDefault("database.pool.max_lifetime", "5m")
 	v.SetDefault("database.pool.max_idle_time", "1m")
+	v.SetDefault("transcriber.token_manager.scope", "SALUTE_SPEECH_PERS")
+	v.SetDefault("transcriber.token_manager.url", "https://ngw.devices.sberbank.ru:9443/api/v2/oauth")
+	v.SetDefault("transcriber.token_manager.refresh_interval", "29m")
 }
 
 // validates configuration
@@ -113,14 +125,18 @@ func validateConfig(cfg *Config) error {
 	if cfg.DatabaseDSN == "" {
 		return fmt.Errorf("database DSN is required")
 	}
+	if cfg.TranscriberTokenManagerCredentials == "" {
+		return fmt.Errorf("transcriber token manager credentials are required")
+	}
 	return nil
 }
 
 // String implements custom string representation for Config
 func (c *Config) String() string {
-	return fmt.Sprintf("Config{Bot: {Username: %s, PoolSize: %d, MaxQueueSize: %d}, Database: {Retry: {MaxAttempts: %d, Backoff: %s}, Pool: {MaxOpenConns: %d, MaxIdleConns: %d, MaxLifetime: %s, MaxIdleTime: %s}}}",
+	return fmt.Sprintf("Config{Bot: {Username: %s, PoolSize: %d, MaxQueueSize: %d}, Database: {Retry: {MaxAttempts: %d, Backoff: %s}, Pool: {MaxOpenConns: %d, MaxIdleConns: %d, MaxLifetime: %s, MaxIdleTime: %s}}, Transcriber: {TokenManager: {Scope: %s, URL: %s, RefreshInterval: %s}}}",
 		c.Bot.Username, c.Bot.PoolSize, c.Bot.MaxQueueSize,
 		c.Database.Retry.MaxAttempts, c.Database.Retry.Backoff,
 		c.Database.Pool.MaxOpenConns, c.Database.Pool.MaxIdleConns,
-		c.Database.Pool.MaxLifetime, c.Database.Pool.MaxIdleTime)
+		c.Database.Pool.MaxLifetime, c.Database.Pool.MaxIdleTime,
+		c.Transcriber.TokenManager.Scope, c.Transcriber.TokenManager.URL, c.Transcriber.TokenManager.RefreshInterval)
 }
