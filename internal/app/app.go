@@ -36,7 +36,6 @@ func (a *App) RunWithContext(ctx context.Context) {
 		go a.bot.Start(ctx)
 	}
 
-	// Initialize token manager with initial token
 	if err := a.tokenManager.RefreshToken(ctx); err != nil {
 		a.c.Logger.Error("Failed to get initial token", zap.Error(err))
 	}

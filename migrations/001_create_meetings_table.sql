@@ -18,7 +18,7 @@ CREATE TABLE
     meetings (
         id SERIAL PRIMARY KEY,
         telegram_id BIGINT NOT NULL REFERENCES users (telegram_id) ON DELETE CASCADE,
-        audio_url TEXT,
+        file_id TEXT,
         full_text TEXT,
         summary TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

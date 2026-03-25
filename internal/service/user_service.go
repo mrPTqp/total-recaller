@@ -25,7 +25,6 @@ func (s *UserService) RegisterUser(
 	ctx context.Context,
 	telegramID int64,
 	username, firstName, lastName string,
-	logger *zap.Logger,
 ) error {
 	user := &models.User{
 		TelegramID: telegramID,
@@ -36,7 +35,7 @@ func (s *UserService) RegisterUser(
 	}
 
 	if err := s.repo.Create(ctx, user); err != nil {
-		logger.Error("Failed to register user", zap.Int64("telegram_id", telegramID), zap.Error(err))
+		s.logger.Error("Failed to register user", zap.Int64("telegram_id", telegramID), zap.Error(err))
 		return fmt.Errorf("failed to register user: %w", err)
 	}
 

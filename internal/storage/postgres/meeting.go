@@ -28,7 +28,7 @@ func (r *postgresMeetingRepository) prepareStatements() {
 	var err error
 
 	r.createStmt, err = r.db.Preparex(`
-		INSERT INTO meetings (telegram_id, audio_url, full_text, summary, created_at)
+		INSERT INTO meetings (telegram_id, file_id, full_text, summary, created_at)
 		VALUES ($1, $2, $3, $4, $5)
 		RETURNING id`)
 	if err != nil {
@@ -36,7 +36,7 @@ func (r *postgresMeetingRepository) prepareStatements() {
 	}
 
 	r.getByIDStmt, err = r.db.Preparex(`
-		SELECT id, telegram_id, audio_url, full_text, summary, created_at
+		SELECT id, telegram_id, file_id, full_text, summary, created_at
 		FROM meetings 
 		WHERE id = $1 AND telegram_id = $2`)
 	if err != nil {
@@ -44,7 +44,7 @@ func (r *postgresMeetingRepository) prepareStatements() {
 	}
 
 	r.listByUserStmt, err = r.db.Preparex(`
-		SELECT id, telegram_id, audio_url, full_text, summary, created_at
+		SELECT id, telegram_id, file_id, full_text, summary, created_at
 		FROM meetings 
 		WHERE telegram_id = $1
 		ORDER BY created_at DESC 
@@ -54,7 +54,7 @@ func (r *postgresMeetingRepository) prepareStatements() {
 	}
 
 	r.searchStmt, err = r.db.Preparex(`
-		SELECT id, telegram_id, audio_url, full_text, summary, created_at
+		SELECT id, telegram_id, file_id, full_text, summary, created_at
 		FROM meetings 
 		WHERE telegram_id = $1 AND full_text_tsvector @@ plainto_tsquery('russian', $2)
 		ORDER BY created_at DESC 
@@ -72,7 +72,7 @@ func (r *postgresMeetingRepository) Create(ctx context.Context, meeting *models.
 	defer tx.Rollback()
 
 	err = r.createStmt.QueryRowContext(ctx,
-		meeting.TelegramID, meeting.AudioURL, meeting.FullText,
+		meeting.TelegramID, meeting.FileId, meeting.FullText,
 		meeting.Summary, meeting.CreatedAt).Scan(&meeting.ID)
 	if err != nil {
 		return fmt.Errorf("failed to create meeting: %w", err)

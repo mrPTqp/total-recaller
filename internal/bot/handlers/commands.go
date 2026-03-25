@@ -50,7 +50,7 @@ func (h *CommandHandlers) HandleStart(ctx tele.Context) error {
 		ctxWithTimeout, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 
-		err := h.userService.RegisterUser(ctxWithTimeout, user.ID, user.Username, user.FirstName, user.LastName, h.logger)
+		err := h.userService.RegisterUser(ctxWithTimeout, user.ID, user.Username, user.FirstName, user.LastName)
 		if err != nil {
 			h.logger.Error("Failed to register user", zap.Int64("telegram_id", user.ID), zap.Error(err))
 			return
@@ -79,7 +79,7 @@ func (h *CommandHandlers) HandleList(ctx tele.Context) error {
 		ctxWithTimeout, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 
-		meetings, err := h.meetingService.ListMeetings(ctxWithTimeout, ctx.Sender().ID, h.logger)
+		meetings, err := h.meetingService.ListMeetings(ctxWithTimeout, ctx.Sender().ID)
 		if err != nil {
 			h.logger.Error("Failed to list meetings", zap.Error(err))
 			return
@@ -117,7 +117,7 @@ func (h *CommandHandlers) HandleGet(ctx tele.Context) error {
 		ctxWithTimeout, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 
-		meeting, err := h.meetingService.GetMeeting(ctxWithTimeout, meetingID, ctx.Sender().ID, h.logger)
+		meeting, err := h.meetingService.GetMeeting(ctxWithTimeout, meetingID, ctx.Sender().ID)
 		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				ctx.Send("Встреча не найдена")
@@ -147,7 +147,7 @@ func (h *CommandHandlers) HandleFind(ctx tele.Context) error {
 		ctxWithTimeout, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 
-		meetings, err := h.meetingService.SearchMeetings(ctxWithTimeout, ctx.Sender().ID, query, 100, 0, h.logger)
+		meetings, err := h.meetingService.SearchMeetings(ctxWithTimeout, ctx.Sender().ID, query, 100, 0)
 		if err != nil {
 			h.logger.Error("Failed to search meetings", zap.String("query", query), zap.Error(err))
 			ctx.Send("Ошибка при поиске встреч")

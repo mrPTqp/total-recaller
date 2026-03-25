@@ -6,7 +6,7 @@ import "time"
 type Meeting struct {
 	ID         int       `json:"id"`
 	TelegramID int64     `json:"telegram_id"`
-	AudioURL   string    `json:"audio_url"`
+	FileId     string    `json:"file_id"`
 	FullText   string    `json:"full_text"`
 	Summary    string    `json:"summary"`
 	CreatedAt  time.Time `json:"created_at"`

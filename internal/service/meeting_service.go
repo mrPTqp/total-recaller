@@ -21,45 +21,45 @@ func NewMeetingService(repo storage.MeetingRepository, logger *zap.Logger) *Meet
 	}
 }
 
-func (s *MeetingService) CreateMeeting(ctx context.Context, telegramID int64, audioURL string, logger *zap.Logger) (*models.Meeting, error) {
+func (s *MeetingService) CreateMeeting(ctx context.Context, telegramID int64, fileId string) (*models.Meeting, error) {
 	meeting := &models.Meeting{
 		TelegramID: telegramID,
-		AudioURL:   audioURL,
+		FileId:     fileId,
 		CreatedAt:  models.TimeNow(),
 	}
 
 	if err := s.repo.Create(ctx, meeting); err != nil {
-		logger.Error("Failed to create meeting", zap.Error(err))
+		s.logger.Error("Failed to create meeting", zap.Error(err))
 		return nil, fmt.Errorf("failed to create meeting: %w", err)
 	}
 
 	return meeting, nil
 }
 
-func (s *MeetingService) GetMeeting(ctx context.Context, id int, telegramID int64, logger *zap.Logger) (*models.Meeting, error) {
+func (s *MeetingService) GetMeeting(ctx context.Context, id int, telegramID int64) (*models.Meeting, error) {
 	meeting, err := s.repo.GetByID(ctx, id, telegramID)
 	if err != nil {
-		logger.Error("Failed to get meeting", zap.Int("id", id), zap.Error(err))
+		s.logger.Error("Failed to get meeting", zap.Int("id", id), zap.Error(err))
 		return nil, fmt.Errorf("failed to get meeting: %w", err)
 	}
 
 	return meeting, nil
 }
 
-func (s *MeetingService) ListMeetings(ctx context.Context, telegramID int64, logger *zap.Logger) ([]models.Meeting, error) {
+func (s *MeetingService) ListMeetings(ctx context.Context, telegramID int64) ([]models.Meeting, error) {
 	meetings, err := s.repo.ListByUser(ctx, telegramID, 100)
 	if err != nil {
-		logger.Error("Failed to list meetings", zap.Error(err))
+		s.logger.Error("Failed to list meetings", zap.Error(err))
 		return nil, fmt.Errorf("failed to list meetings: %w", err)
 	}
 
 	return meetings, nil
 }
 
-func (s *MeetingService) SearchMeetings(ctx context.Context, telegramID int64, query string, limit, offset int, logger *zap.Logger) ([]models.Meeting, error) {
+func (s *MeetingService) SearchMeetings(ctx context.Context, telegramID int64, query string, limit, offset int) ([]models.Meeting, error) {
 	meetings, err := s.repo.Search(ctx, telegramID, query, limit, offset)
 	if err != nil {
-		logger.Error("Failed to search meetings", zap.String("query", query), zap.Error(err))
+		s.logger.Error("Failed to search meetings", zap.String("query", query), zap.Error(err))
 		return nil, fmt.Errorf("failed to search meetings: %w", err)
 	}
 

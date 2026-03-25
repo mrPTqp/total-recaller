@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"net/http"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/mrPTqp/total-recaller/internal/storage"
 	"github.com/mrPTqp/total-recaller/internal/storage/postgres"
 	"github.com/mrPTqp/total-recaller/internal/token"
+	"github.com/mrPTqp/total-recaller/internal/transcriber"
 	"go.uber.org/zap"
 )
 
@@ -49,35 +51,45 @@ func (bs *Bootstrapper) MustRun(ctx context.Context) (*AppComponents, error) {
 		bs.cfg.Database.Retry.Backoff,
 	)
 
+	httpClient := &http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: true,
+			},
+		},
+	}
+
+	tokenManager := token.NewTokenManager(bs.cfg, httpClient)	
+
+	transcriberClient := transcriber.NewTranscriberClient(bs.cfg, httpClient, tokenManager, bs.logger)
+
 	userService := service.NewUserService(userRepo, bs.logger)
 	meetingService := service.NewMeetingService(meetingRepo, bs.logger)
 
-	botClient, err := bot.NewClient(bs.cfg, bs.logger, workerPool, meetingService, userService)
+	botClient, err := bot.NewClient(bs.cfg, bs.logger, workerPool, meetingService, userService, transcriberClient)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create bot client: %w", err)
 	}
 
-	httpClient := &http.Client{}
-
-	tokenManager := token.NewTokenManager(bs.cfg, httpClient)
-
 	components := &AppComponents{
-		Config:       bs.cfg,
-		Logger:       bs.logger,
-		Bot:          botClient,
-		Database:     db,
-		TokenManager: tokenManager,
-		HTTPClient:   httpClient,
+		Config:            bs.cfg,
+		Logger:            bs.logger,
+		Bot:               botClient,
+		Database:          db,
+		TokenManager:      tokenManager,
+		HTTPClient:        httpClient,
+		TranscriberClient: transcriberClient,
 	}
 
 	return components, nil
 }
 
 type AppComponents struct {
-	Config       *config.Config
-	Logger       *zap.Logger
-	Bot          *bot.Client
-	Database     *storage.Database
-	TokenManager *token.TokenManager
-	HTTPClient   *http.Client
+	Config            *config.Config
+	Logger            *zap.Logger
+	Bot               *bot.Client
+	Database          *storage.Database
+	TokenManager      *token.TokenManager
+	HTTPClient        *http.Client
+	TranscriberClient *transcriber.TranscriberClient
 }

@@ -22,10 +22,10 @@ type Config struct {
 			Backoff     time.Duration `mapstructure:"backoff"`
 		} `mapstructure:"retry"`
 		Pool struct {
-			MaxOpenConns    int           `mapstructure:"max_open_conns"`
-			MaxIdleConns    int           `mapstructure:"max_idle_conns"`
-			MaxLifetime     time.Duration `mapstructure:"max_lifetime"`
-			MaxIdleTime     time.Duration `mapstructure:"max_idle_time"`
+			MaxOpenConns int           `mapstructure:"max_open_conns"`
+			MaxIdleConns int           `mapstructure:"max_idle_conns"`
+			MaxLifetime  time.Duration `mapstructure:"max_lifetime"`
+			MaxIdleTime  time.Duration `mapstructure:"max_idle_time"`
 		} `mapstructure:"pool"`
 	} `mapstructure:"database"`
 	Transcriber struct {
@@ -34,10 +34,11 @@ type Config struct {
 			URL             string        `mapstructure:"url"`
 			RefreshInterval time.Duration `mapstructure:"refresh_interval"`
 		} `mapstructure:"token_manager"`
+		SaluteURL string `mapstructure:"salute_url"`
 	} `mapstructure:"transcriber"`
 	// Sensitive data loaded only from environment variables
-	BotToken string `mapstructure:"-"`
-	DatabaseDSN string `mapstructure:"-"`
+	BotToken                           string `mapstructure:"-"`
+	DatabaseDSN                        string `mapstructure:"-"`
 	TranscriberTokenManagerCredentials string `mapstructure:"-"`
 }
 
@@ -112,6 +113,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("transcriber.token_manager.scope", "SALUTE_SPEECH_PERS")
 	v.SetDefault("transcriber.token_manager.url", "https://ngw.devices.sberbank.ru:9443/api/v2/oauth")
 	v.SetDefault("transcriber.token_manager.refresh_interval", "29m")
+	v.SetDefault("transcriber.salute_url", "https://smartspeech.sber.ru/rest/v1")
 }
 
 // validates configuration

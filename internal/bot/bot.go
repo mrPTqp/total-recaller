@@ -8,17 +8,19 @@ import (
 	"github.com/mrPTqp/total-recaller/internal/bot/handlers"
 	"github.com/mrPTqp/total-recaller/internal/config"
 	"github.com/mrPTqp/total-recaller/internal/service"
+	"github.com/mrPTqp/total-recaller/internal/transcriber"
 	"go.uber.org/zap"
 	telegramm "gopkg.in/telebot.v3"
 )
 
 type Client struct {
-	bot         *telegramm.Bot
-	cfg         *config.Config
-	logger      *zap.Logger
-	workerPool  *workerpool.WorkerPool
-	cmdHandlers *handlers.CommandHandlers
-	evtHandlers *handlers.EventHandlers
+	bot               *telegramm.Bot
+	cfg               *config.Config
+	logger            *zap.Logger
+	workerPool        *workerpool.WorkerPool
+	cmdHandlers       *handlers.CommandHandlers
+	evtHandlers       *handlers.EventHandlers
+	transcriberClient *transcriber.TranscriberClient
 }
 
 func NewClient(
@@ -27,6 +29,7 @@ func NewClient(
 	workerPool *workerpool.WorkerPool,
 	meetingService *service.MeetingService,
 	userService *service.UserService,
+	transcriberClient *transcriber.TranscriberClient,
 ) (*Client, error) {
 	settings := telegramm.Settings{
 		Token:  cfg.BotToken,
@@ -40,7 +43,7 @@ func NewClient(
 	}
 
 	cmdHandlers := handlers.NewCommandHandlers(bot, cfg, logger, workerPool, meetingService, userService)
-	evtHandlers := handlers.NewEventHandlers(bot, cfg, logger, workerPool)
+	evtHandlers := handlers.NewEventHandlers(bot, cfg, logger, workerPool, meetingService, transcriberClient)
 
 	client := &Client{
 		bot:         bot,

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/mrPTqp/total-recaller/internal/config"
@@ -29,7 +30,9 @@ func NewTokenManager(config *config.Config, httpClient *http.Client) *TokenManag
 }
 
 func (tm *TokenManager) RefreshToken(ctx context.Context) error {
-	req, err := http.NewRequestWithContext(ctx, "POST", tm.config.Transcriber.TokenManager.URL, nil)
+	body := "scope=" + tm.config.Transcriber.TokenManager.Scope
+
+	req, err := http.NewRequestWithContext(ctx, "POST", tm.config.Transcriber.TokenManager.URL, strings.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
 	}
@@ -39,27 +42,23 @@ func (tm *TokenManager) RefreshToken(ctx context.Context) error {
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Authorization", "Bearer "+tm.config.TranscriberTokenManagerCredentials)
 
-	q := req.URL.Query()
-	q.Add("scope", tm.config.Transcriber.TokenManager.Scope)
-	req.URL.RawQuery = q.Encode()
-
 	resp, err := tm.httpClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to make request: %w", err)
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
+	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return fmt.Errorf("failed to read response: %w", err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("token request failed with status %d: %s", resp.StatusCode, string(body))
+		return fmt.Errorf("token request failed with status %d: %s", resp.StatusCode, string(respBody))
 	}
 
 	var tokenResp TokenResponse
-	if err := json.Unmarshal(body, &tokenResp); err != nil {
+	if err := json.Unmarshal(respBody, &tokenResp); err != nil {
 		return fmt.Errorf("failed to parse token response: %w", err)
 	}
 
