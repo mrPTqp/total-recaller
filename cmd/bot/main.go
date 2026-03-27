@@ -13,7 +13,6 @@ import (
 	"github.com/mrPTqp/total-recaller/pkg/logger"
 )
 
-//TODO add giga proxy
 //TODO add validation
 //TODO new go features
 //TODO add channels

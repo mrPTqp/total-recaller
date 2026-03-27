@@ -30,12 +30,19 @@ type UploadResponse struct {
 
 type RecognizeRequest struct {
 	Options struct {
-		Model         string `json:"model"`
-		AudioEncoding string `json:"audio_encoding"`
-		SampleRate    int    `json:"sample_rate"`
-		ChannelsCount int    `json:"channels_count"`
+		Model                    string                   `json:"model"`
+		AudioEncoding            string                   `json:"audio_encoding"`
+		SampleRate               int                      `json:"sample_rate"`
+		ChannelsCount            int                      `json:"channels_count"`
+		SpeakerSeparationOptions SpeakerSeparationOptions `json:"speaker_separation_options"`
 	} `json:"options"`
 	RequestFileID string `json:"request_file_id"`
+}
+
+type SpeakerSeparationOptions struct {
+	Enable                bool `json:"enable"`
+	EnableOnlyMainSpeaker bool `json:"enable_only_main_speaker"`
+	Count                 int  `json:"count"`
 }
 
 type RecognizeResponse struct {
@@ -186,6 +193,9 @@ func (tc *TranscriberClient) CreateRecognitionTask(ctx context.Context, requestF
 	recognizeReq.Options.SampleRate = 16000
 	recognizeReq.RequestFileID = requestFileID
 	recognizeReq.Options.ChannelsCount = 1
+	recognizeReq.Options.SpeakerSeparationOptions.Enable = true
+	recognizeReq.Options.SpeakerSeparationOptions.EnableOnlyMainSpeaker = false
+	recognizeReq.Options.SpeakerSeparationOptions.Count = 10
 
 	body, err := json.Marshal(recognizeReq)
 	if err != nil {
@@ -314,14 +324,8 @@ func (tc *TranscriberClient) TranscribeFile(ctx context.Context, audio io.ReadCl
 				return "", fmt.Errorf("failed to download result: %w", err)
 			}
 
-			// Extract text from result
-			var transcription strings.Builder
-			for _, speechResult := range *result {
-				for _, textResult := range speechResult.Results {
-					transcription.WriteString(textResult.Text + " ")
-				}
-			}
-			return strings.TrimSpace(transcription.String()), nil
+			// Extract speaker-aware transcription
+			return tc.formatSpeakerTranscription(result), nil
 		case "ERROR":
 			return "", fmt.Errorf("transcription failed: task status is ERROR")
 		}
@@ -329,4 +333,36 @@ func (tc *TranscriberClient) TranscribeFile(ctx context.Context, audio io.ReadCl
 		// Wait before polling again
 		time.Sleep(1 * time.Second)
 	}
+}
+
+
+func (tc *TranscriberClient) formatSpeakerTranscription(result *DownloadResponse) string {
+	var transcription strings.Builder
+	speakerMap := make(map[int]string)
+	speakerCounter := 1
+
+	// Process each speech result in chronological order
+	for _, speechResult := range *result {
+		// Skip results with speaker_id = -1 (end of utterance markers)
+		if speechResult.SpeakerInfo.SpeakerID == -1 {
+			continue
+		}
+
+		// Map speaker ID to readable label
+		speakerID := speechResult.SpeakerInfo.SpeakerID
+		if _, exists := speakerMap[speakerID]; !exists {
+			speakerMap[speakerID] = fmt.Sprintf("Speaker %d", speakerCounter)
+			speakerCounter++
+		}
+		speakerLabel := speakerMap[speakerID]
+
+		// Add each text result for this speaker
+		for _, textResult := range speechResult.Results {
+			if textResult.Text != "" {
+				transcription.WriteString(fmt.Sprintf("[%s]: %s\n", speakerLabel, textResult.Text))
+			}
+		}
+	}
+
+	return strings.TrimSpace(transcription.String())
 }

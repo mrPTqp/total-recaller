@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"time"
@@ -45,6 +46,20 @@ func (h *EventHandlers) HandleVoice(ctx tele.Context) error {
 		zap.String("username", user.Username),
 		zap.Int64("file_size", voice.FileSize),
 	)
+
+	if voice.FileSize > h.cfg.Bot.MaxFileSize {
+		h.logger.Warn("Voice message exceeds file size limit",
+			zap.String("username", user.Username),
+			zap.Int64("file_size", voice.FileSize),
+			zap.Int64("max_file_size", h.cfg.Bot.MaxFileSize))
+
+		errorMsg := fmt.Sprintf("❌ Размер аудиосообщения превышает лимит в %.1f МБ. Пожалуйста, отправьте более короткое сообщение.", float64(h.cfg.Bot.MaxFileSize)/1024/1024)
+		_, err := ctx.Bot().Send(ctx.Chat(), errorMsg)
+		if err != nil {
+			h.logger.Error("Failed to send file size limit error message", zap.Error(err))
+		}
+		return nil
+	}
 
 	processingMsg := "⏳ Обрабатываю аудиозапись..."
 	sentMsg, err := ctx.Bot().Send(ctx.Chat(), processingMsg)
@@ -149,6 +164,20 @@ func (h *EventHandlers) HandleAudio(ctx tele.Context) error {
 		zap.String("title", audio.Title),
 		zap.Int64("file_size", audio.FileSize),
 	)
+
+	if audio.FileSize > h.cfg.Bot.MaxFileSize {
+		h.logger.Warn("Audio file exceeds file size limit",
+			zap.String("username", user.Username),
+			zap.Int64("file_size", audio.FileSize),
+			zap.Int64("max_file_size", h.cfg.Bot.MaxFileSize))
+
+		errorMsg := fmt.Sprintf("❌ Размер аудиофайла превышает лимит в %.1f МБ. Пожалуйста, загрузите файл меньшего размера.", float64(h.cfg.Bot.MaxFileSize)/1024/1024)
+		_, err := ctx.Bot().Send(ctx.Chat(), errorMsg)
+		if err != nil {
+			h.logger.Error("Failed to send file size limit error message", zap.Error(err))
+		}
+		return nil
+	}
 
 	extension := strings.ToLower(filepath.Ext(audio.FileName))
 	if extension != ".mp3" {
