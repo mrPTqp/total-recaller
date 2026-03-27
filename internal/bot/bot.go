@@ -7,6 +7,7 @@ import (
 	"github.com/gammazero/workerpool"
 	"github.com/mrPTqp/total-recaller/internal/bot/handlers"
 	"github.com/mrPTqp/total-recaller/internal/config"
+	"github.com/mrPTqp/total-recaller/internal/llm"
 	"github.com/mrPTqp/total-recaller/internal/service"
 	"github.com/mrPTqp/total-recaller/internal/transcriber"
 	"go.uber.org/zap"
@@ -30,6 +31,7 @@ func NewClient(
 	meetingService *service.MeetingService,
 	userService *service.UserService,
 	transcriberClient *transcriber.TranscriberClient,
+	gigachatClient *llm.LLMClient,
 ) (*Client, error) {
 	settings := telegramm.Settings{
 		Token:  cfg.BotToken,
@@ -43,7 +45,7 @@ func NewClient(
 	}
 
 	cmdHandlers := handlers.NewCommandHandlers(bot, cfg, logger, workerPool, meetingService, userService)
-	evtHandlers := handlers.NewEventHandlers(bot, cfg, logger, workerPool, meetingService, transcriberClient)
+	evtHandlers := handlers.NewEventHandlers(bot, cfg, logger, workerPool, meetingService, transcriberClient, gigachatClient)
 
 	client := &Client{
 		bot:         bot,

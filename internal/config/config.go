@@ -36,10 +36,19 @@ type Config struct {
 		} `mapstructure:"token_manager"`
 		SaluteURL string `mapstructure:"salute_url"`
 	} `mapstructure:"transcriber"`
+	LLM struct {
+		TokenManager struct {
+			Scope           string        `mapstructure:"scope"`
+			URL             string        `mapstructure:"url"`
+			RefreshInterval time.Duration `mapstructure:"refresh_interval"`
+		} `mapstructure:"token_manager"`
+		Model string `mapstructure:"model"`
+	} `mapstructure:"llm"`
 	// Sensitive data loaded only from environment variables
 	BotToken                           string `mapstructure:"-"`
 	DatabaseDSN                        string `mapstructure:"-"`
 	TranscriberTokenManagerCredentials string `mapstructure:"-"`
+	LLMTokenManagerCredentials    string `mapstructure:"-"`
 }
 
 func LoadConfig() (*Config, error) {
@@ -59,6 +68,7 @@ func LoadConfig() (*Config, error) {
 	cfg.BotToken = v.GetString("BOT_TOKEN")
 	cfg.DatabaseDSN = v.GetString("DATABASE_DSN")
 	cfg.TranscriberTokenManagerCredentials = v.GetString("TRANSCRIBER_TOKEN_MANAGER_CREDENTIALS")
+	cfg.LLMTokenManagerCredentials = v.GetString("LLM_TOKEN_MANAGER_CREDENTIALS")
 
 	if err := validateConfig(&cfg); err != nil {
 		return nil, fmt.Errorf("configuration validation failed: %w", err)
@@ -114,6 +124,10 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("transcriber.token_manager.url", "https://ngw.devices.sberbank.ru:9443/api/v2/oauth")
 	v.SetDefault("transcriber.token_manager.refresh_interval", "29m")
 	v.SetDefault("transcriber.salute_url", "https://smartspeech.sber.ru/rest/v1")
+	v.SetDefault("llm.token_manager.scope", "GIGACHAT_API_PERS")
+	v.SetDefault("llm.token_manager.url", "https://ngw.devices.sberbank.ru:9443/api/v2/oauth")
+	v.SetDefault("llm.token_manager.refresh_interval", "29m")
+	v.SetDefault("llm.model", "GigaChat-2")
 }
 
 // validates configuration

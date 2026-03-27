@@ -9,6 +9,7 @@ import (
 	"github.com/gammazero/workerpool"
 	"github.com/mrPTqp/total-recaller/internal/bot"
 	"github.com/mrPTqp/total-recaller/internal/config"
+	"github.com/mrPTqp/total-recaller/internal/llm"
 	"github.com/mrPTqp/total-recaller/internal/service"
 	"github.com/mrPTqp/total-recaller/internal/storage"
 	"github.com/mrPTqp/total-recaller/internal/storage/postgres"
@@ -51,7 +52,7 @@ func (bs *Bootstrapper) MustRun(ctx context.Context) (*AppComponents, error) {
 		bs.cfg.Database.Retry.Backoff,
 	)
 
-	httpClient := &http.Client{
+	tokenManagerHttpClient := &http.Client{
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{
 				InsecureSkipVerify: true,
@@ -59,14 +60,31 @@ func (bs *Bootstrapper) MustRun(ctx context.Context) (*AppComponents, error) {
 		},
 	}
 
-	tokenManager := token.NewTokenManager(bs.cfg, httpClient)	
+	transcriberHttpClient := &http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: true,
+			},
+		},
+	}
 
-	transcriberClient := transcriber.NewTranscriberClient(bs.cfg, httpClient, tokenManager, bs.logger)
+	LLMHttpClient := &http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: true,
+			},
+		},
+	}
+
+	tokenManager := token.NewTokenManager(bs.cfg, tokenManagerHttpClient, bs.logger)
+
+	transcriberClient := transcriber.NewTranscriberClient(bs.cfg, transcriberHttpClient, tokenManager, bs.logger)
+	gigachatClient := llm.NewGigachatClient(bs.cfg, LLMHttpClient, tokenManager, bs.logger)
 
 	userService := service.NewUserService(userRepo, bs.logger)
 	meetingService := service.NewMeetingService(meetingRepo, bs.logger)
 
-	botClient, err := bot.NewClient(bs.cfg, bs.logger, workerPool, meetingService, userService, transcriberClient)
+	botClient, err := bot.NewClient(bs.cfg, bs.logger, workerPool, meetingService, userService, transcriberClient, gigachatClient)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create bot client: %w", err)
 	}
@@ -77,7 +95,7 @@ func (bs *Bootstrapper) MustRun(ctx context.Context) (*AppComponents, error) {
 		Bot:               botClient,
 		Database:          db,
 		TokenManager:      tokenManager,
-		HTTPClient:        httpClient,
+		HTTPClient:        transcriberHttpClient,
 		TranscriberClient: transcriberClient,
 	}
 

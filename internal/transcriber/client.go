@@ -157,7 +157,7 @@ func (tc *TranscriberClient) UploadFile(ctx context.Context, audio io.ReadCloser
 		return "", fmt.Errorf("failed to create request: %w", err)
 	}
 
-	req.Header.Set("Authorization", "Bearer "+tc.tokenManager.GetToken())
+	req.Header.Set("Authorization", "Bearer "+tc.tokenManager.GetToken(tc.config.Transcriber.TokenManager.Scope))
 
 	resp, err := tc.httpClient.Do(req)
 	if err != nil {
@@ -198,7 +198,7 @@ func (tc *TranscriberClient) CreateRecognitionTask(ctx context.Context, requestF
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+tc.tokenManager.GetToken())
+	req.Header.Set("Authorization", "Bearer "+tc.tokenManager.GetToken(tc.config.Transcriber.TokenManager.Scope))
 
 	resp, err := tc.httpClient.Do(req)
 	if err != nil {
@@ -227,7 +227,7 @@ func (tc *TranscriberClient) CheckTaskStatus(ctx context.Context, taskID string)
 		return "", "", fmt.Errorf("failed to create status request: %w", err)
 	}
 
-	req.Header.Set("Authorization", "Bearer "+tc.tokenManager.GetToken())
+	req.Header.Set("Authorization", "Bearer "+tc.tokenManager.GetToken(tc.config.Transcriber.TokenManager.Scope))
 
 	resp, err := tc.httpClient.Do(req)
 	if err != nil {
@@ -256,7 +256,7 @@ func (tc *TranscriberClient) DownloadResult(ctx context.Context, responseFileID 
 		return nil, fmt.Errorf("failed to create download request: %w", err)
 	}
 
-	req.Header.Set("Authorization", "Bearer "+tc.tokenManager.GetToken())
+	req.Header.Set("Authorization", "Bearer "+tc.tokenManager.GetToken(tc.config.Transcriber.TokenManager.Scope))
 
 	resp, err := tc.httpClient.Do(req)
 	if err != nil {

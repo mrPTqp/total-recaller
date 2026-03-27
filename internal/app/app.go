@@ -2,9 +2,9 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
-	"fmt"
 
 	"github.com/mrPTqp/total-recaller/internal/bot"
 	"github.com/mrPTqp/total-recaller/internal/storage"
@@ -36,11 +36,16 @@ func (a *App) RunWithContext(ctx context.Context) {
 		go a.bot.Start(ctx)
 	}
 
-	if err := a.tokenManager.RefreshToken(ctx); err != nil {
+	if err := a.tokenManager.RefreshToken(ctx, a.c.Config.Transcriber.TokenManager.Scope); err != nil {
+		a.c.Logger.Error("Failed to get initial token", zap.Error(err))
+	}
+	if err := a.tokenManager.RefreshToken(ctx, a.c.Config.LLM.TokenManager.Scope); err != nil {
 		a.c.Logger.Error("Failed to get initial token", zap.Error(err))
 	}
 
 	a.runBackgroundJobs(ctx)
+
+	a.c.Logger.Info("application started")
 }
 
 func (a *App) runBackgroundJobs(ctx context.Context) {
@@ -51,7 +56,7 @@ func (a *App) runBackgroundJobs(ctx context.Context) {
 			return
 		case <-a.ticker.C:
 			backupCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-			if err := a.tokenManager.RefreshToken(backupCtx); err != nil {
+			if err := a.tokenManager.RefreshToken(backupCtx, a.c.Config.Transcriber.TokenManager.Scope); err != nil {
 				fmt.Printf("failed to refresh token %v", err)
 			}
 			cancel()
