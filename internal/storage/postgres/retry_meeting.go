@@ -48,3 +48,10 @@ func (r *retryMeetingRepository) Search(ctx context.Context, telegramID int64, q
 	}, r.maxAttempts, r.backoff)
 }
 
+func (r *retryMeetingRepository) UpdateSummary(ctx context.Context, telegramID int64, fileId string, summary string) error {
+	_, err := storage.WithRetryContext(ctx, func(ctx context.Context) (interface{}, error) {
+		return nil, r.repo.UpdateSummary(ctx, telegramID, fileId, summary)
+	}, r.maxAttempts, r.backoff)
+	return err
+}
+

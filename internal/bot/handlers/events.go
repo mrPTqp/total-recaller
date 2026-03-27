@@ -101,7 +101,7 @@ func (h *EventHandlers) HandleVoice(ctx tele.Context) error {
 		}
 
 		h.logger.Info("Creating meeting record")
-		_, err = h.meetingService.CreateMeeting(wpCtx, ctx.Sender().ID, fileId)
+		_, err = h.meetingService.CreateMeeting(wpCtx, ctx.Sender().ID, fileId, transcription)
 		if err != nil {
 			h.logger.Error("Failed to create meeting", zap.Error(err))
 			return
@@ -120,6 +120,14 @@ func (h *EventHandlers) HandleVoice(ctx tele.Context) error {
 			return
 		}
 		h.logger.Info("Gigachat summarization completed", zap.String("summary", summary))
+
+		h.logger.Info("Updating meeting with summary")
+		err = h.meetingService.UpdateMeetingSummary(wpCtx, ctx.Sender().ID, fileId, summary)
+		if err != nil {
+			h.logger.Error("Failed to update meeting with summary", zap.Error(err))
+			return
+		}
+		h.logger.Info("Meeting updated with summary successfully")
 
 		h.logger.Info("Editing message with summary")
 		if _, err := ctx.Bot().Edit(sentMsg, summary); err != nil {
@@ -212,7 +220,7 @@ func (h *EventHandlers) HandleAudio(ctx tele.Context) error {
 		}
 
 		h.logger.Info("Creating meeting record")
-		_, err = h.meetingService.CreateMeeting(wpCtx, ctx.Sender().ID, fileId)
+		_, err = h.meetingService.CreateMeeting(wpCtx, ctx.Sender().ID, fileId, transcription)
 		if err != nil {
 			h.logger.Error("Failed to create meeting", zap.Error(err))
 			return
@@ -231,6 +239,14 @@ func (h *EventHandlers) HandleAudio(ctx tele.Context) error {
 			return
 		}
 		h.logger.Info("Gigachat summarization completed", zap.String("summary", summary))
+
+		h.logger.Info("Updating meeting with summary")
+		err = h.meetingService.UpdateMeetingSummary(wpCtx, ctx.Sender().ID, fileId, summary)
+		if err != nil {
+			h.logger.Error("Failed to update meeting with summary", zap.Error(err))
+			return
+		}
+		h.logger.Info("Meeting updated with summary successfully")
 
 		h.logger.Info("Editing message with summary")
 		if _, err := ctx.Bot().Edit(sentMsg, summary); err != nil {

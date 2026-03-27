@@ -21,11 +21,12 @@ func NewMeetingService(repo storage.MeetingRepository, logger *zap.Logger) *Meet
 	}
 }
 
-func (s *MeetingService) CreateMeeting(ctx context.Context, telegramID int64, fileId string) (*models.Meeting, error) {
+func (s *MeetingService) CreateMeeting(ctx context.Context, telegramID int64, fileId, transcription string) (*models.Meeting, error) {
 	meeting := &models.Meeting{
 		TelegramID: telegramID,
 		FileId:     fileId,
 		CreatedAt:  models.TimeNow(),
+		FullText:   transcription,
 	}
 
 	if err := s.repo.Create(ctx, meeting); err != nil {
@@ -64,4 +65,14 @@ func (s *MeetingService) SearchMeetings(ctx context.Context, telegramID int64, q
 	}
 
 	return meetings, nil
+}
+
+func (s *MeetingService) UpdateMeetingSummary(ctx context.Context, telegramID int64, fileId string, summary string) error {
+	err := s.repo.UpdateSummary(ctx, telegramID, fileId, summary)
+	if err != nil {
+		s.logger.Error("Failed to update meeting summary", zap.String("file_id", fileId), zap.Error(err))
+		return fmt.Errorf("failed to update meeting summary: %w", err)
+	}
+
+	return nil
 }

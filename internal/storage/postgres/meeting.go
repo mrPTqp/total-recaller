@@ -110,3 +110,22 @@ func (r *postgresMeetingRepository) Search(ctx context.Context, telegramID int64
 
 	return meetings, nil
 }
+
+func (r *postgresMeetingRepository) UpdateSummary(ctx context.Context, telegramID int64, fileId string, summary string) error {
+	tx, err := r.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	_, err = tx.ExecContext(ctx, `
+		UPDATE meetings 
+		SET summary = $1 
+		WHERE telegram_id = $2 AND file_id = $3`,
+		summary, telegramID, fileId)
+	if err != nil {
+		return fmt.Errorf("failed to update meeting summary: %w", err)
+	}
+
+	return tx.Commit()
+}
