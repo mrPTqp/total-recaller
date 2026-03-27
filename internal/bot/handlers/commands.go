@@ -11,6 +11,7 @@ import (
 
 	"github.com/gammazero/workerpool"
 	"github.com/mrPTqp/total-recaller/internal/config"
+	"github.com/mrPTqp/total-recaller/internal/llm"
 	"github.com/mrPTqp/total-recaller/internal/service"
 	"go.uber.org/zap"
 	tele "gopkg.in/telebot.v3"
@@ -23,6 +24,7 @@ type CommandHandlers struct {
 	wp             *workerpool.WorkerPool
 	meetingService *service.MeetingService
 	userService    *service.UserService
+	llmClient      *llm.LLMClient
 }
 
 func NewCommandHandlers(
@@ -32,6 +34,7 @@ func NewCommandHandlers(
 	wp *workerpool.WorkerPool,
 	meetingService *service.MeetingService,
 	userService *service.UserService,
+	llmClient *llm.LLMClient,
 ) *CommandHandlers {
 	return &CommandHandlers{
 		bot:            bot,
@@ -40,6 +43,7 @@ func NewCommandHandlers(
 		wp:             wp,
 		meetingService: meetingService,
 		userService:    userService,
+		llmClient:      llmClient,
 	}
 }
 
@@ -188,8 +192,20 @@ func (h *CommandHandlers) HandleChat(ctx tele.Context) error {
 	question := ctx.Text()[5:]
 
 	h.wp.Submit(func() {
-		message := fmt.Sprintf("Анализирую ваш вопрос: '%s'\n\n[Ответ от GigaChat]", question)
-		ctx.Send(message)
+		ctxWithTimeout, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		defer cancel()
+
+		h.logger.Info("Processing chat request", zap.String("question", question))
+		
+		response, err := h.llmClient.Chat(ctxWithTimeout, question)
+		if err != nil {
+			h.logger.Error("Failed to get response from LLM", zap.Error(err))
+			ctx.Send("Извините, произошла ошибка при обработке вашего запроса. Пожалуйста, попробуйте позже.")
+			return
+		}
+
+		h.logger.Info("Successfully received response from LLM", zap.String("response", response))
+		ctx.Send(response)
 	})
 
 	return nil

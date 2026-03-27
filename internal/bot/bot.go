@@ -44,7 +44,7 @@ func NewClient(
 		return nil, err
 	}
 
-	cmdHandlers := handlers.NewCommandHandlers(bot, cfg, logger, workerPool, meetingService, userService)
+	cmdHandlers := handlers.NewCommandHandlers(bot, cfg, logger, workerPool, meetingService, userService, gigachatClient)
 	evtHandlers := handlers.NewEventHandlers(bot, cfg, logger, workerPool, meetingService, transcriberClient, gigachatClient)
 
 	client := &Client{
