@@ -82,10 +82,12 @@ func (h *CommandHandlers) HandleList(ctx tele.Context) error {
 		meetings, err := h.meetingService.ListMeetings(ctxWithTimeout, ctx.Sender().ID)
 		if err != nil {
 			h.logger.Error("Failed to list meetings", zap.Error(err))
+			ctx.Send("Ошибка при получении списка встреч")
 			return
 		}
 
 		if len(meetings) == 0 {
+			ctx.Send("У вас пока нет сохраненных встреч")
 			return
 		}
 
@@ -125,6 +127,11 @@ func (h *CommandHandlers) HandleGet(ctx tele.Context) error {
 			}
 			h.logger.Error("Failed to get meeting", zap.Int("id", meetingID), zap.Error(err))
 			ctx.Send("Ошибка при получении транскрипции")
+			return
+		}
+
+		if meeting.FullText == "" {
+			ctx.Send("Транскрипция для этой встречи еще не готова")
 			return
 		}
 

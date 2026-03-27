@@ -13,6 +13,14 @@ import (
 	"github.com/mrPTqp/total-recaller/pkg/logger"
 )
 
+//TODO add giga proxy
+//TODO add validation
+//TODO new go features
+//TODO add channels
+//TODO add logging
+//TODO add tests
+//TODO add semantic search
+
 func main() {
 	log, err := zap.NewProduction()
 	if err != nil {
