@@ -35,7 +35,9 @@ type Config struct {
 			URL             string        `mapstructure:"url"`
 			RefreshInterval time.Duration `mapstructure:"refresh_interval"`
 		} `mapstructure:"token_manager"`
-		SaluteURL string `mapstructure:"salute_url"`
+		SaluteURL        string `mapstructure:"salute_url"`
+		TaskBufferSize   int    `mapstructure:"task_buffer_size"`
+		ResultBufferSize int    `mapstructure:"result_buffer_size"`
 	} `mapstructure:"transcriber"`
 	LLM struct {
 		TokenManager struct {
@@ -43,13 +45,15 @@ type Config struct {
 			URL             string        `mapstructure:"url"`
 			RefreshInterval time.Duration `mapstructure:"refresh_interval"`
 		} `mapstructure:"token_manager"`
-		Model string `mapstructure:"model"`
+		Model            string `mapstructure:"model"`
+		TaskBufferSize   int    `mapstructure:"task_buffer_size"`
+		ResultBufferSize int    `mapstructure:"result_buffer_size"`
 	} `mapstructure:"llm"`
 	// Sensitive data loaded only from environment variables
 	BotToken                           string `mapstructure:"-"`
 	DatabaseDSN                        string `mapstructure:"-"`
 	TranscriberTokenManagerCredentials string `mapstructure:"-"`
-	LLMTokenManagerCredentials    string `mapstructure:"-"`
+	LLMTokenManagerCredentials         string `mapstructure:"-"`
 }
 
 func LoadConfig() (*Config, error) {
@@ -126,10 +130,14 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("transcriber.token_manager.url", "https://ngw.devices.sberbank.ru:9443/api/v2/oauth")
 	v.SetDefault("transcriber.token_manager.refresh_interval", "29m")
 	v.SetDefault("transcriber.salute_url", "https://smartspeech.sber.ru/rest/v1")
+	v.SetDefault("transcriber.task_buffer_size", 100)
+	v.SetDefault("transcriber.result_buffer_size", 100)
 	v.SetDefault("llm.token_manager.scope", "GIGACHAT_API_PERS")
 	v.SetDefault("llm.token_manager.url", "https://ngw.devices.sberbank.ru:9443/api/v2/oauth")
 	v.SetDefault("llm.token_manager.refresh_interval", "29m")
 	v.SetDefault("llm.model", "GigaChat-2")
+	v.SetDefault("llm.task_buffer_size", 100)
+	v.SetDefault("llm.result_buffer_size", 100)
 }
 
 // validates configuration
@@ -151,10 +159,13 @@ func validateConfig(cfg *Config) error {
 
 // String implements custom string representation for Config
 func (c *Config) String() string {
-	return fmt.Sprintf("Config{Bot: {Username: %s, PoolSize: %d, MaxQueueSize: %d}, Database: {Retry: {MaxAttempts: %d, Backoff: %s}, Pool: {MaxOpenConns: %d, MaxIdleConns: %d, MaxLifetime: %s, MaxIdleTime: %s}}, Transcriber: {TokenManager: {Scope: %s, URL: %s, RefreshInterval: %s}}}",
-		c.Bot.Username, c.Bot.PoolSize, c.Bot.MaxQueueSize,
+	return fmt.Sprintf("Config{Bot: {Username: %s, PoolSize: %d, MaxQueueSize: %d, MaxFileSize: %d}, Database: {Retry: {MaxAttempts: %d, Backoff: %s}, Pool: {MaxOpenConns: %d, MaxIdleConns: %d, MaxLifetime: %s, MaxIdleTime: %s}}, Transcriber: {TokenManager: {Scope: %s, URL: %s, RefreshInterval: %s}, SaluteURL: %s, TaskBufferSize: %d, ResultBufferSize: %d}, LLM: {TokenManager: {Scope: %s, URL: %s, RefreshInterval: %s}, Model: %s, TaskBufferSize: %d, ResultBufferSize: %d}}}",
+		c.Bot.Username, c.Bot.PoolSize, c.Bot.MaxQueueSize, c.Bot.MaxFileSize,
 		c.Database.Retry.MaxAttempts, c.Database.Retry.Backoff,
 		c.Database.Pool.MaxOpenConns, c.Database.Pool.MaxIdleConns,
 		c.Database.Pool.MaxLifetime, c.Database.Pool.MaxIdleTime,
-		c.Transcriber.TokenManager.Scope, c.Transcriber.TokenManager.URL, c.Transcriber.TokenManager.RefreshInterval)
+		c.Transcriber.TokenManager.Scope, c.Transcriber.TokenManager.URL, c.Transcriber.TokenManager.RefreshInterval,
+		c.Transcriber.SaluteURL, c.Transcriber.TaskBufferSize, c.Transcriber.ResultBufferSize,
+		c.LLM.TokenManager.Scope, c.LLM.TokenManager.URL, c.LLM.TokenManager.RefreshInterval,
+		c.LLM.Model, c.LLM.TaskBufferSize, c.LLM.ResultBufferSize)
 }

@@ -5,17 +5,21 @@ import (
 	"crypto/tls"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/gammazero/workerpool"
 	"github.com/mrPTqp/total-recaller/internal/bot"
+	"github.com/mrPTqp/total-recaller/internal/bot/handlers"
 	"github.com/mrPTqp/total-recaller/internal/config"
 	"github.com/mrPTqp/total-recaller/internal/llm"
+	"github.com/mrPTqp/total-recaller/internal/queue"
 	"github.com/mrPTqp/total-recaller/internal/service"
 	"github.com/mrPTqp/total-recaller/internal/storage"
 	"github.com/mrPTqp/total-recaller/internal/storage/postgres"
 	"github.com/mrPTqp/total-recaller/internal/token"
 	"github.com/mrPTqp/total-recaller/internal/transcriber"
 	"go.uber.org/zap"
+	telegramm "gopkg.in/telebot.v3"
 )
 
 type Bootstrapper struct {
@@ -28,8 +32,6 @@ func NewBootstrapper(cfg *config.Config, logger *zap.Logger) *Bootstrapper {
 }
 
 func (bs *Bootstrapper) MustRun(ctx context.Context) (*AppComponents, error) {
-	workerPool := workerpool.New(bs.cfg.Bot.PoolSize)
-
 	db, err := storage.NewDatabase(
 		bs.cfg.DatabaseDSN,
 		bs.cfg.Database.Pool.MaxOpenConns,
@@ -84,7 +86,25 @@ func (bs *Bootstrapper) MustRun(ctx context.Context) (*AppComponents, error) {
 	userService := service.NewUserService(userRepo, bs.logger)
 	meetingService := service.NewMeetingService(meetingRepo, bs.logger)
 
-	botClient, err := bot.NewClient(bs.cfg, bs.logger, workerPool, meetingService, userService, transcriberClient, gigachatClient)
+	queueManager := queue.NewQueueManager(bs.cfg)
+	workerManager := queue.NewWorkerManager(bs.logger, meetingService, transcriberClient, gigachatClient)
+
+	settings := telegramm.Settings{
+		Token:  bs.cfg.BotToken,
+		Poller: &telegramm.LongPoller{Timeout: 10 * time.Second},
+	}
+
+	tbot, err := telegramm.NewBot(settings)
+	if err != nil {
+		bs.logger.Fatal("Failed to create bot", zap.Error(err))
+		return nil, err
+	}
+
+	workerPool := workerpool.New(bs.cfg.Bot.PoolSize)
+	cmdHandlers := handlers.NewCommandHandlers(bs.logger, workerPool, meetingService, userService, queueManager)
+	evtHandlers := handlers.NewEventHandlers(bs.cfg, bs.logger, workerPool, meetingService, queueManager)
+
+	botClient, err := bot.NewClient(tbot, bs.cfg, bs.logger, workerPool, cmdHandlers, evtHandlers)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create bot client: %w", err)
 	}
@@ -97,6 +117,8 @@ func (bs *Bootstrapper) MustRun(ctx context.Context) (*AppComponents, error) {
 		TokenManager:      tokenManager,
 		HTTPClient:        transcriberHttpClient,
 		TranscriberClient: transcriberClient,
+		QueueManager:      queueManager,
+		WorkerManager:     workerManager,
 	}
 
 	return components, nil
@@ -110,4 +132,6 @@ type AppComponents struct {
 	TokenManager      *token.TokenManager
 	HTTPClient        *http.Client
 	TranscriberClient *transcriber.TranscriberClient
+	QueueManager      *queue.QueueManager
+	WorkerManager     *queue.WorkerManager
 }

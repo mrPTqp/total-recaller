@@ -2,51 +2,31 @@ package bot
 
 import (
 	"context"
-	"time"
 
 	"github.com/gammazero/workerpool"
 	"github.com/mrPTqp/total-recaller/internal/bot/handlers"
 	"github.com/mrPTqp/total-recaller/internal/config"
-	"github.com/mrPTqp/total-recaller/internal/llm"
-	"github.com/mrPTqp/total-recaller/internal/service"
-	"github.com/mrPTqp/total-recaller/internal/transcriber"
 	"go.uber.org/zap"
 	telegramm "gopkg.in/telebot.v3"
 )
 
 type Client struct {
-	bot               *telegramm.Bot
-	cfg               *config.Config
-	logger            *zap.Logger
-	workerPool        *workerpool.WorkerPool
-	cmdHandlers       *handlers.CommandHandlers
-	evtHandlers       *handlers.EventHandlers
-	transcriberClient *transcriber.TranscriberClient
+	bot         *telegramm.Bot
+	cfg         *config.Config
+	logger      *zap.Logger
+	workerPool  *workerpool.WorkerPool
+	cmdHandlers *handlers.CommandHandlers
+	evtHandlers *handlers.EventHandlers
 }
 
 func NewClient(
+	bot *telegramm.Bot,
 	cfg *config.Config,
 	logger *zap.Logger,
 	workerPool *workerpool.WorkerPool,
-	meetingService *service.MeetingService,
-	userService *service.UserService,
-	transcriberClient *transcriber.TranscriberClient,
-	gigachatClient *llm.LLMClient,
+	cmdHandlers *handlers.CommandHandlers,
+	evtHandlers *handlers.EventHandlers,
 ) (*Client, error) {
-	settings := telegramm.Settings{
-		Token:  cfg.BotToken,
-		Poller: &telegramm.LongPoller{Timeout: 10 * time.Second},
-	}
-
-	bot, err := telegramm.NewBot(settings)
-	if err != nil {
-		logger.Fatal("Failed to create bot", zap.Error(err))
-		return nil, err
-	}
-
-	cmdHandlers := handlers.NewCommandHandlers(bot, cfg, logger, workerPool, meetingService, userService, gigachatClient)
-	evtHandlers := handlers.NewEventHandlers(bot, cfg, logger, workerPool, meetingService, transcriberClient, gigachatClient)
-
 	client := &Client{
 		bot:         bot,
 		cfg:         cfg,

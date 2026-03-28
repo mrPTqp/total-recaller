@@ -10,40 +10,33 @@ import (
 	"time"
 
 	"github.com/gammazero/workerpool"
-	"github.com/mrPTqp/total-recaller/internal/config"
-	"github.com/mrPTqp/total-recaller/internal/llm"
+	"github.com/mrPTqp/total-recaller/internal/queue"
 	"github.com/mrPTqp/total-recaller/internal/service"
 	"go.uber.org/zap"
 	tele "gopkg.in/telebot.v3"
 )
 
 type CommandHandlers struct {
-	bot            *tele.Bot
-	cfg            *config.Config
 	logger         *zap.Logger
 	wp             *workerpool.WorkerPool
 	meetingService *service.MeetingService
 	userService    *service.UserService
-	llmClient      *llm.LLMClient
+	queueManager   *queue.QueueManager
 }
 
 func NewCommandHandlers(
-	bot *tele.Bot,
-	cfg *config.Config,
 	logger *zap.Logger,
 	wp *workerpool.WorkerPool,
 	meetingService *service.MeetingService,
 	userService *service.UserService,
-	llmClient *llm.LLMClient,
+	queueManager *queue.QueueManager,
 ) *CommandHandlers {
 	return &CommandHandlers{
-		bot:            bot,
-		cfg:            cfg,
 		logger:         logger,
 		wp:             wp,
 		meetingService: meetingService,
 		userService:    userService,
-		llmClient:      llmClient,
+		queueManager:   queueManager,
 	}
 }
 
@@ -191,22 +184,47 @@ func (h *CommandHandlers) HandleChat(ctx tele.Context) error {
 
 	question := ctx.Text()[5:]
 
-	h.wp.Submit(func() {
+	taskID := queue.GenerateMessageID()
+	task := queue.LLMTask{
+		ID:        taskID,
+		UserID:    ctx.Sender().ID,
+		TaskType:  queue.LLMTaskTypeChat,
+		Text:      "", // Not used for chat tasks
+		Query:     question,
+		CreatedAt: time.Now(),
+	}
+
+	select {
+	case h.queueManager.LLMTasks <- task:
+		h.logger.Info("Sent chat task to LLM queue",
+			zap.String("task_id", taskID),
+			zap.String("question", question))
+	default:
+		h.logger.Info("LLM channel is full, cannot send chat task")
+		return ctx.Send("Извините, система перегружена. Пожалуйста, попробуйте позже.")
+	}
+
+	go func() {
 		ctxWithTimeout, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
 
-		h.logger.Info("Processing chat request", zap.String("question", question))
-		
-		response, err := h.llmClient.Chat(ctxWithTimeout, question)
-		if err != nil {
-			h.logger.Error("Failed to get response from LLM", zap.Error(err))
-			ctx.Send("Извините, произошла ошибка при обработке вашего запроса. Пожалуйста, попробуйте позже.")
-			return
-		}
+		select {
+		case result := <-h.queueManager.LLMResults:
+			if result.TaskID == taskID {
+				if result.Error != nil {
+					h.logger.Error("Failed to get response from LLM", zap.Error(result.Error))
+					ctx.Send("Извините, произошла ошибка при обработке вашего запроса. Пожалуйста, попробуйте позже.")
+					return
+				}
 
-		h.logger.Info("Successfully received response from LLM", zap.String("response", response))
-		ctx.Send(response)
-	})
+				h.logger.Info("Successfully received response from LLM", zap.String("response", result.Response))
+				ctx.Send(result.Response)
+			}
+		case <-ctxWithTimeout.Done():
+			h.logger.Info("Timeout while waiting for LLM response")
+			ctx.Send("Извините, запрос обрабатывается слишком долго. Пожалуйста, попробуйте позже.")
+		}
+	}()
 
 	return nil
 }
