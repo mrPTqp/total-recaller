@@ -24,7 +24,7 @@ func NewRetryUserRepository(repo storage.UserRepository, maxAttempts int, backof
 }
 
 func (r *retryUserRepository) Create(ctx context.Context, user *models.User) error {
-	_, err := storage.WithRetryContext(ctx, func(ctx context.Context) (interface{}, error) {
+	_, err := storage.WithRetryContext(ctx, func(ctx context.Context) (any, error) {
 		return nil, r.repo.Create(ctx, user)
 	}, r.maxAttempts, r.backoff)
 	return err

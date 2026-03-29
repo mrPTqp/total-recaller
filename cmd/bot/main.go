@@ -8,17 +8,15 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/mrPTqp/total-recaller/internal/config"
 	"github.com/mrPTqp/total-recaller/internal/app"
+	"github.com/mrPTqp/total-recaller/internal/config"
 	"github.com/mrPTqp/total-recaller/pkg/logger"
 )
 
-//TODO add validation
 //TODO new go features
-//TODO add channels
 //TODO add logging
 //TODO add tests
-//TODO add semantic search
+//TODO classify errors
 
 func main() {
 	log, err := zap.NewProduction()

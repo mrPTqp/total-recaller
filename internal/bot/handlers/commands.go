@@ -63,6 +63,7 @@ func (h *CommandHandlers) HandleStart(ctx tele.Context) error {
 			"/list - Показать список встреч\n"+
 			"/get <id> - Получить транскрипцию встречи\n"+
 			"/find <ключевые слова> - Найти встречу по ключевым словам\n"+
+			"/sfind <запрос по смыслу> - Найти встречу по смыслу\n"+
 			"/chat - Задать вопрос ИИ-ассистенту\n\n"+
 			"Просто отправь мне аудиофайл или голосовое сообщение, и я создам транскрипцию!",
 		user.FirstName,
@@ -225,6 +226,81 @@ func (h *CommandHandlers) HandleChat(ctx tele.Context) error {
 			ctx.Send("Извините, запрос обрабатывается слишком долго. Пожалуйста, попробуйте позже.")
 		}
 	}()
+
+	return nil
+}
+
+func (h *CommandHandlers) HandleSemanticFind(ctx tele.Context) error {
+	args := ctx.Args()
+	if len(args) == 0 {
+		return ctx.Send("Пожалуйста, укажите поисковый запрос. Пример: /sfind Как проходило собрание по проекту?")
+	}
+
+	query := strings.Join(args, " ")
+
+	h.wp.Submit(func() {
+		ctxWithTimeout, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		embeddingTaskID := queue.GenerateMessageID()
+		embeddingTask := queue.EmbeddingTask{
+			ID:        embeddingTaskID,
+			UserID:    ctx.Sender().ID,
+			Text:      query,
+			FileID:    "", // Not used for search queries
+			CreatedAt: time.Now(),
+		}
+
+		select {
+		case h.queueManager.EmbeddingTasks <- embeddingTask:
+			h.logger.Info("Sent semantic search task to embedding queue",
+				zap.String("task_id", embeddingTaskID),
+				zap.String("query", query))
+		default:
+			h.logger.Info("Embedding channel is full, cannot send semantic search task")
+			ctx.Send("Извините, система перегружена. Пожалуйста, попробуйте позже.")
+			return
+		}
+
+		var queryEmbedding []float32
+		select {
+		case result := <-h.queueManager.EmbeddingResults:
+			if result.TaskID == embeddingTaskID {
+				if result.Error != nil {
+					h.logger.Error("Failed to generate query embedding", zap.Error(result.Error))
+					ctx.Send("Извините, произошла ошибка при обработке запроса. Пожалуйста, попробуйте позже.")
+					return
+				}
+				queryEmbedding = result.Embedding
+			}
+		case <-ctxWithTimeout.Done():
+			h.logger.Info("Timeout while waiting for query embedding")
+			ctx.Send("Извините, запрос обрабатывается слишком долго. Пожалуйста, попробуйте позже.")
+			return
+		}
+
+		// Search meetings by embedding
+		meetings, err := h.meetingService.SearchMeetingsByEmbedding(ctxWithTimeout, ctx.Sender().ID, queryEmbedding, 100, 0)
+		if err != nil {
+			h.logger.Error("Failed to search meetings by embedding", zap.String("query", query), zap.Error(err))
+			ctx.Send("Ошибка при поиске встреч")
+			return
+		}
+
+		if len(meetings) == 0 {
+			ctx.Send("По вашему запросу ничего не найдено")
+			return
+		}
+
+		var message strings.Builder
+		message.WriteString("Результаты семантического поиска:\n\n")
+		for i, meeting := range meetings {
+			fmt.Fprintf(&message, "%d. %s (ID: %d)\n", i+1,
+				meeting.CreatedAt.Format("2006-01-02 15:04"), meeting.ID)
+		}
+
+		ctx.Send(message.String())
+	})
 
 	return nil
 }

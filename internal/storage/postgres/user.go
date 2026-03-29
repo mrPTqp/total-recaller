@@ -10,8 +10,8 @@ import (
 )
 
 type postgresUserRepository struct {
-	db           *sqlx.DB
-	createStmt   *sqlx.Stmt
+	db            *sqlx.DB
+	createStmt    *sqlx.Stmt
 	getByTgIDStmt *sqlx.Stmt
 }
 
@@ -24,7 +24,7 @@ func NewUserRepository(db *sqlx.DB) storage.UserRepository {
 
 func (r *postgresUserRepository) prepareStatements() {
 	var err error
-	
+
 	r.createStmt, err = r.db.Preparex(`
 		INSERT INTO users (telegram_id, username, first_name, last_name, created_at)
 		VALUES ($1, $2, $3, $4, $5)

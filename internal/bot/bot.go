@@ -45,7 +45,6 @@ func NewClient(
 func (c *Client) Start(ctx context.Context) {
 	c.logger.Info("Starting bot", zap.Int("workers", c.cfg.Bot.PoolSize))
 	c.bot.Start()
-	c.logger.Info("Bot started successfully")
 }
 
 func (c *Client) Stop() {
@@ -59,12 +58,14 @@ func (c *Client) registerCommandRoutes() {
 	c.bot.Handle("/get", c.cmdHandlers.HandleGet)
 	c.bot.Handle("/find", c.cmdHandlers.HandleFind)
 	c.bot.Handle("/chat", c.cmdHandlers.HandleChat)
+	c.bot.Handle("/sfind", c.cmdHandlers.HandleSemanticFind)
 
 	commands := []telegramm.Command{
 		{Text: "start", Description: "Зарегистрироваться"},
 		{Text: "list", Description: "Получить список сохраненных встреч"},
 		{Text: "get", Description: "Получить текст конкретной встречи"},
 		{Text: "find", Description: "Найти встречу по ключевым словам"},
+		{Text: "sfind", Description: "Найти встречу по смыслу"},
 		{Text: "chat", Description: "Отправить запрос к GigaChat"},
 	}
 

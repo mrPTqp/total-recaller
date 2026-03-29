@@ -9,7 +9,6 @@ import (
 	"github.com/spf13/viper"
 )
 
-// application configuration
 type Config struct {
 	Bot struct {
 		Username     string `mapstructure:"username"`
@@ -45,7 +44,8 @@ type Config struct {
 			URL             string        `mapstructure:"url"`
 			RefreshInterval time.Duration `mapstructure:"refresh_interval"`
 		} `mapstructure:"token_manager"`
-		Model            string `mapstructure:"model"`
+		GenerateModel    string `mapstructure:"generate_model"`
+		EmbeddingModel   string `mapstructure:"embedding_model"`
 		TaskBufferSize   int    `mapstructure:"task_buffer_size"`
 		ResultBufferSize int    `mapstructure:"result_buffer_size"`
 	} `mapstructure:"llm"`
@@ -114,7 +114,6 @@ func loadEnvironment(v *viper.Viper) {
 	v.AutomaticEnv()
 }
 
-// sets default values for configuration
 func setDefaults(v *viper.Viper) {
 	v.SetDefault("bot.username", "")
 	v.SetDefault("bot.pool_size", 10)
@@ -135,12 +134,12 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("llm.token_manager.scope", "GIGACHAT_API_PERS")
 	v.SetDefault("llm.token_manager.url", "https://ngw.devices.sberbank.ru:9443/api/v2/oauth")
 	v.SetDefault("llm.token_manager.refresh_interval", "29m")
-	v.SetDefault("llm.model", "GigaChat-2")
+	v.SetDefault("llm.generate_model", "GigaChat-2")
+	v.SetDefault("llm.embedding_model", "Embeddings-2")
 	v.SetDefault("llm.task_buffer_size", 100)
 	v.SetDefault("llm.result_buffer_size", 100)
 }
 
-// validates configuration
 func validateConfig(cfg *Config) error {
 	if cfg.Bot.Username == "" {
 		return fmt.Errorf("bot username is required")
@@ -157,9 +156,8 @@ func validateConfig(cfg *Config) error {
 	return nil
 }
 
-// String implements custom string representation for Config
 func (c *Config) String() string {
-	return fmt.Sprintf("Config{Bot: {Username: %s, PoolSize: %d, MaxQueueSize: %d, MaxFileSize: %d}, Database: {Retry: {MaxAttempts: %d, Backoff: %s}, Pool: {MaxOpenConns: %d, MaxIdleConns: %d, MaxLifetime: %s, MaxIdleTime: %s}}, Transcriber: {TokenManager: {Scope: %s, URL: %s, RefreshInterval: %s}, SaluteURL: %s, TaskBufferSize: %d, ResultBufferSize: %d}, LLM: {TokenManager: {Scope: %s, URL: %s, RefreshInterval: %s}, Model: %s, TaskBufferSize: %d, ResultBufferSize: %d}}}",
+	return fmt.Sprintf("Config{Bot: {Username: %s, PoolSize: %d, MaxQueueSize: %d, MaxFileSize: %d}, Database: {Retry: {MaxAttempts: %d, Backoff: %s}, Pool: {MaxOpenConns: %d, MaxIdleConns: %d, MaxLifetime: %s, MaxIdleTime: %s}}, Transcriber: {TokenManager: {Scope: %s, URL: %s, RefreshInterval: %s}, SaluteURL: %s, TaskBufferSize: %d, ResultBufferSize: %d}, LLM: {TokenManager: {Scope: %s, URL: %s, RefreshInterval: %s}, GenerateModel: %s, EmbeddingModel: %s, TaskBufferSize: %d, ResultBufferSize: %d}}}",
 		c.Bot.Username, c.Bot.PoolSize, c.Bot.MaxQueueSize, c.Bot.MaxFileSize,
 		c.Database.Retry.MaxAttempts, c.Database.Retry.Backoff,
 		c.Database.Pool.MaxOpenConns, c.Database.Pool.MaxIdleConns,
@@ -167,5 +165,5 @@ func (c *Config) String() string {
 		c.Transcriber.TokenManager.Scope, c.Transcriber.TokenManager.URL, c.Transcriber.TokenManager.RefreshInterval,
 		c.Transcriber.SaluteURL, c.Transcriber.TaskBufferSize, c.Transcriber.ResultBufferSize,
 		c.LLM.TokenManager.Scope, c.LLM.TokenManager.URL, c.LLM.TokenManager.RefreshInterval,
-		c.LLM.Model, c.LLM.TaskBufferSize, c.LLM.ResultBufferSize)
+		c.LLM.GenerateModel, c.LLM.EmbeddingModel, c.LLM.TaskBufferSize, c.LLM.ResultBufferSize)
 }

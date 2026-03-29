@@ -19,11 +19,11 @@ import (
 )
 
 type EventHandlers struct {
-	cfg               *config.Config
-	logger            *zap.Logger
-	wp                *workerpool.WorkerPool
-	meetingService    *service.MeetingService
-	queueManager      *queue.QueueManager
+	cfg            *config.Config
+	logger         *zap.Logger
+	wp             *workerpool.WorkerPool
+	meetingService *service.MeetingService
+	queueManager   *queue.QueueManager
 }
 
 func NewEventHandlers(
@@ -34,11 +34,11 @@ func NewEventHandlers(
 	queueManager *queue.QueueManager,
 ) *EventHandlers {
 	return &EventHandlers{
-		cfg:               cfg,
-		logger:            logger,
-		wp:                workerPool,
-		meetingService:    meetingService,
-		queueManager:      queueManager,
+		cfg:            cfg,
+		logger:         logger,
+		wp:             workerPool,
+		meetingService: meetingService,
+		queueManager:   queueManager,
 	}
 }
 
@@ -130,12 +130,10 @@ func (h *EventHandlers) HandleAudio(ctx tele.Context) error {
 	return nil
 }
 
-
 func (h *EventHandlers) processAudioTask(ctx tele.Context, user *tele.User, task queue.TranscriberTask, sentMsg *tele.Message) {
 	wpCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	// Download audio file
 	rc, err := h.downloadAudioFile(ctx, task.FileID)
 	if err != nil {
 		h.logger.Error("Failed to download audio file", zap.Error(err))
@@ -143,10 +141,8 @@ func (h *EventHandlers) processAudioTask(ctx tele.Context, user *tele.User, task
 	}
 	defer rc.Close()
 
-	// Update task with audio data
 	task.AudioData = rc
 
-	// Send task to transcriber channel
 	select {
 	case h.queueManager.TranscriberTasks <- task:
 		h.logger.Info("Sent task to transcriber queue",
@@ -157,14 +153,12 @@ func (h *EventHandlers) processAudioTask(ctx tele.Context, user *tele.User, task
 		return
 	}
 
-	// Wait for transcription result
 	transcriberResult, err := h.waitForTranscriptionResult(wpCtx, task.ID)
 	if err != nil {
 		h.logger.Error("Failed to get transcription result", zap.Error(err))
 		return
 	}
 
-	// Handle transcription errors or empty results
 	if transcriberResult.Error != nil {
 		h.handleTranscriptionError(ctx, sentMsg, transcriberResult.Error)
 		return
@@ -175,15 +169,32 @@ func (h *EventHandlers) processAudioTask(ctx tele.Context, user *tele.User, task
 		return
 	}
 
-	// Create meeting record
 	meeting, err := h.createMeetingRecord(wpCtx, user.ID, transcriberResult.FileID, transcriberResult.Transcription)
 	if err != nil {
 		h.logger.Error("Failed to create meeting", zap.Error(err))
+		h.handleMeetingCreationError(ctx, sentMsg, err)
 		return
 	}
 	h.logger.Info("Meeting record created successfully", zap.Int("meeting_id", meeting.ID))
 
-	// Send summarization task to LLM
+	embeddingTaskID := queue.GenerateMessageID()
+	embeddingTask := queue.EmbeddingTask{
+		ID:        embeddingTaskID,
+		UserID:    user.ID,
+		Text:      transcriberResult.Transcription,
+		FileID:    transcriberResult.FileID,
+		CreatedAt: time.Now(),
+	}
+
+	select {
+	case h.queueManager.EmbeddingTasks <- embeddingTask:
+		h.logger.Info("Sent embedding task to queue",
+			zap.String("task_id", embeddingTaskID))
+	default:
+		h.logger.Info("Embedding channel is full, cannot send embedding task")
+		return
+	}
+
 	summaryTaskID := queue.GenerateMessageID()
 	summaryTask := queue.LLMTask{
 		ID:        summaryTaskID,
@@ -203,20 +214,17 @@ func (h *EventHandlers) processAudioTask(ctx tele.Context, user *tele.User, task
 		return
 	}
 
-	// Wait for summarization result
 	summaryResult, err := h.waitForSummarizationResult(wpCtx, summaryTaskID)
 	if err != nil {
 		h.logger.Error("Failed to get summarization result", zap.Error(err))
 		return
 	}
 
-	// Handle summarization errors
 	if summaryResult.Error != nil {
 		h.handleSummarizationError(ctx, sentMsg, summaryResult.Error)
 		return
 	}
 
-	// Update meeting with summary
 	err = h.meetingService.UpdateMeetingSummary(wpCtx, user.ID, transcriberResult.FileID, summaryResult.Response)
 	if err != nil {
 		h.logger.Error("Failed to update meeting with summary", zap.Error(err))
@@ -224,7 +232,24 @@ func (h *EventHandlers) processAudioTask(ctx tele.Context, user *tele.User, task
 	}
 	h.logger.Info("Meeting updated with summary successfully")
 
-	// Edit message with summary
+	embeddingResult, err := h.waitForEmbeddingResult(wpCtx, embeddingTaskID)
+	if err != nil {
+		h.logger.Error("Failed to get embedding result", zap.Error(err))
+		return
+	}
+
+	if embeddingResult.Error != nil {
+		h.logger.Error("Failed to generate embedding", zap.Error(embeddingResult.Error))
+		return
+	}
+
+	err = h.meetingService.UpdateMeetingEmbedding(wpCtx, user.ID, transcriberResult.FileID, embeddingResult.Embedding)
+	if err != nil {
+		h.logger.Error("Failed to update meeting with embedding", zap.Error(err))
+		return
+	}
+	h.logger.Info("Meeting updated with embedding successfully")
+
 	if _, err := ctx.Bot().Edit(sentMsg, summaryResult.Response); err != nil {
 		h.logger.Error("Failed to edit message", zap.Error(err))
 		return
@@ -276,6 +301,19 @@ func (h *EventHandlers) waitForSummarizationResult(ctx context.Context, taskID s
 	return nil, errors.New("summarization result not found")
 }
 
+func (h *EventHandlers) waitForEmbeddingResult(ctx context.Context, taskID string) (*queue.EmbeddingResult, error) {
+	select {
+	case result := <-h.queueManager.EmbeddingResults:
+		if result.TaskID == taskID {
+			return &result, nil
+		}
+	case <-ctx.Done():
+		h.logger.Info("Timeout while waiting for embedding result")
+		return nil, ctx.Err()
+	}
+	return nil, errors.New("embedding result not found")
+}
+
 func (h *EventHandlers) createMeetingRecord(ctx context.Context, userID int64, fileID, transcription string) (*models.Meeting, error) {
 	h.logger.Info("Creating meeting record")
 	meeting, err := h.meetingService.CreateMeeting(ctx, userID, fileID, transcription)
@@ -310,6 +348,14 @@ func (h *EventHandlers) handleSummarizationError(ctx tele.Context, sentMsg *tele
 	}
 }
 
+func (h *EventHandlers) handleMeetingCreationError(ctx tele.Context, sentMsg *tele.Message, err error) {
+	h.logger.Error("Failed to create meeting record", zap.Error(err))
+	errorMsg := "❌ Не удалось сохранить встречу в базе данных. Пожалуйста, попробуйте еще раз."
+	if _, editErr := ctx.Bot().Edit(sentMsg, errorMsg); editErr != nil {
+		h.logger.Error("Failed to send meeting creation error message", zap.Error(editErr))
+	}
+}
+
 func (h *EventHandlers) validateFileSize(ctx tele.Context, username string, fileSize int64) error {
 	if fileSize > h.cfg.Bot.MaxFileSize {
 		h.logger.Warn("Audio exceeds file size limit",
@@ -326,4 +372,3 @@ func (h *EventHandlers) validateFileSize(ctx tele.Context, username string, file
 	}
 	return nil
 }
-

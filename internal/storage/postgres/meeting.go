@@ -10,11 +10,13 @@ import (
 )
 
 type postgresMeetingRepository struct {
-	db             *sqlx.DB
-	createStmt     *sqlx.Stmt
-	getByIDStmt    *sqlx.Stmt
-	listByUserStmt *sqlx.Stmt
-	searchStmt     *sqlx.Stmt
+	db                    *sqlx.DB
+	createStmt            *sqlx.Stmt
+	getByIDStmt           *sqlx.Stmt
+	listByUserStmt        *sqlx.Stmt
+	searchStmt            *sqlx.Stmt
+	updateEmbeddingStmt   *sqlx.Stmt
+	searchByEmbeddingStmt *sqlx.Stmt
 }
 
 // NewMeetingRepository creates a new PostgreSQL meeting repository
@@ -28,15 +30,15 @@ func (r *postgresMeetingRepository) prepareStatements() {
 	var err error
 
 	r.createStmt, err = r.db.Preparex(`
-		INSERT INTO meetings (telegram_id, file_id, full_text, summary, created_at)
-		VALUES ($1, $2, $3, $4, $5)
+		INSERT INTO meetings (telegram_id, file_id, full_text, summary, embedding, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6)
 		RETURNING id`)
 	if err != nil {
 		panic(fmt.Errorf("failed to prepare create statement: %w", err))
 	}
 
 	r.getByIDStmt, err = r.db.Preparex(`
-		SELECT id, telegram_id, file_id, full_text, summary, created_at
+		SELECT id, telegram_id, file_id, full_text, summary, embedding, created_at
 		FROM meetings 
 		WHERE id = $1 AND telegram_id = $2`)
 	if err != nil {
@@ -44,7 +46,7 @@ func (r *postgresMeetingRepository) prepareStatements() {
 	}
 
 	r.listByUserStmt, err = r.db.Preparex(`
-		SELECT id, telegram_id, file_id, full_text, summary, created_at
+		SELECT id, telegram_id, file_id, full_text, summary, embedding, created_at
 		FROM meetings 
 		WHERE telegram_id = $1
 		ORDER BY created_at DESC 
@@ -54,13 +56,31 @@ func (r *postgresMeetingRepository) prepareStatements() {
 	}
 
 	r.searchStmt, err = r.db.Preparex(`
-		SELECT id, telegram_id, file_id, full_text, summary, created_at
+		SELECT id, telegram_id, file_id, full_text, summary, embedding, created_at
 		FROM meetings 
 		WHERE telegram_id = $1 AND full_text_tsvector @@ plainto_tsquery('russian', $2)
 		ORDER BY created_at DESC 
 		LIMIT $3 OFFSET $4`)
 	if err != nil {
 		panic(fmt.Errorf("failed to prepare search statement: %w", err))
+	}
+
+	r.updateEmbeddingStmt, err = r.db.Preparex(`
+		UPDATE meetings 
+		SET embedding = $1 
+		WHERE telegram_id = $2 AND file_id = $3`)
+	if err != nil {
+		panic(fmt.Errorf("failed to prepare update embedding statement: %w", err))
+	}
+
+	r.searchByEmbeddingStmt, err = r.db.Preparex(`
+		SELECT id, telegram_id, file_id, full_text, summary, embedding, created_at
+		FROM meetings 
+		WHERE telegram_id = $1
+		ORDER BY embedding <=> $2
+		LIMIT $3 OFFSET $4`)
+	if err != nil {
+		panic(fmt.Errorf("failed to prepare search by embedding statement: %w", err))
 	}
 }
 
@@ -73,7 +93,7 @@ func (r *postgresMeetingRepository) Create(ctx context.Context, meeting *models.
 
 	err = r.createStmt.QueryRowContext(ctx,
 		meeting.TelegramID, meeting.FileId, meeting.FullText,
-		meeting.Summary, meeting.CreatedAt).Scan(&meeting.ID)
+		meeting.Summary, meeting.Embedding, meeting.CreatedAt).Scan(&meeting.ID)
 	if err != nil {
 		return fmt.Errorf("failed to create meeting: %w", err)
 	}
@@ -128,4 +148,29 @@ func (r *postgresMeetingRepository) UpdateSummary(ctx context.Context, telegramI
 	}
 
 	return tx.Commit()
+}
+
+func (r *postgresMeetingRepository) UpdateEmbedding(ctx context.Context, telegramID int64, fileId string, embedding models.Vector) error {
+	tx, err := r.db.BeginTxx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	_, err = r.updateEmbeddingStmt.ExecContext(ctx, embedding, telegramID, fileId)
+	if err != nil {
+		return fmt.Errorf("failed to update meeting embedding: %w", err)
+	}
+
+	return tx.Commit()
+}
+
+func (r *postgresMeetingRepository) SearchByEmbedding(ctx context.Context, telegramID int64, queryEmbedding models.Vector, limit, offset int) ([]models.Meeting, error) {
+	var meetings []models.Meeting
+	err := r.searchByEmbeddingStmt.SelectContext(ctx, &meetings, telegramID, queryEmbedding, limit, offset)
+	if err != nil {
+		return nil, fmt.Errorf("failed to search meetings by embedding: %w", err)
+	}
+
+	return meetings, nil
 }

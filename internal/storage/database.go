@@ -19,10 +19,10 @@ func NewDatabase(dsn string, maxOpenConns, maxIdleConns int, maxLifetime, maxIdl
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
 	}
 
-	db.SetMaxOpenConns(maxOpenConns)       
-	db.SetMaxIdleConns(maxIdleConns)     
-	db.SetConnMaxLifetime(maxLifetime)     
-	db.SetConnMaxIdleTime(maxIdleTime)     
+	db.SetMaxOpenConns(maxOpenConns)
+	db.SetMaxIdleConns(maxIdleConns)
+	db.SetConnMaxLifetime(maxLifetime)
+	db.SetConnMaxIdleTime(maxIdleTime)
 
 	return &Database{db: db}, nil
 }

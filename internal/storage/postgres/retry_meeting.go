@@ -24,7 +24,7 @@ func NewRetryMeetingRepository(repo storage.MeetingRepository, maxAttempts int, 
 }
 
 func (r *retryMeetingRepository) Create(ctx context.Context, meeting *models.Meeting) error {
-	_, err := storage.WithRetryContext(ctx, func(ctx context.Context) (interface{}, error) {
+	_, err := storage.WithRetryContext(ctx, func(ctx context.Context) (any, error) {
 		return nil, r.repo.Create(ctx, meeting)
 	}, r.maxAttempts, r.backoff)
 	return err
@@ -49,9 +49,21 @@ func (r *retryMeetingRepository) Search(ctx context.Context, telegramID int64, q
 }
 
 func (r *retryMeetingRepository) UpdateSummary(ctx context.Context, telegramID int64, fileId string, summary string) error {
-	_, err := storage.WithRetryContext(ctx, func(ctx context.Context) (interface{}, error) {
+	_, err := storage.WithRetryContext(ctx, func(ctx context.Context) (any, error) {
 		return nil, r.repo.UpdateSummary(ctx, telegramID, fileId, summary)
 	}, r.maxAttempts, r.backoff)
 	return err
 }
 
+func (r *retryMeetingRepository) UpdateEmbedding(ctx context.Context, telegramID int64, fileId string, embedding models.Vector) error {
+	_, err := storage.WithRetryContext(ctx, func(ctx context.Context) (any, error) {
+		return nil, r.repo.UpdateEmbedding(ctx, telegramID, fileId, embedding)
+	}, r.maxAttempts, r.backoff)
+	return err
+}
+
+func (r *retryMeetingRepository) SearchByEmbedding(ctx context.Context, telegramID int64, queryEmbedding models.Vector, limit, offset int) ([]models.Meeting, error) {
+	return storage.WithRetryContext(ctx, func(ctx context.Context) ([]models.Meeting, error) {
+		return r.repo.SearchByEmbedding(ctx, telegramID, queryEmbedding, limit, offset)
+	}, r.maxAttempts, r.backoff)
+}

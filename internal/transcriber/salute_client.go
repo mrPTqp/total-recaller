@@ -15,7 +15,7 @@ import (
 	"go.uber.org/zap"
 )
 
-type TranscriberClient struct {
+type SaluteClient struct {
 	config       *config.Config
 	httpClient   *http.Client
 	tokenManager *token.TokenManager
@@ -149,8 +149,8 @@ func (t Timestamp) String() string {
 	return t.Duration().String()
 }
 
-func NewTranscriberClient(config *config.Config, httpClient *http.Client, tokenManager *token.TokenManager, logger *zap.Logger) *TranscriberClient {
-	return &TranscriberClient{
+func NewSaluteClient(config *config.Config, httpClient *http.Client, tokenManager *token.TokenManager, logger *zap.Logger) *SaluteClient {
+	return &SaluteClient{
 		config:       config,
 		httpClient:   httpClient,
 		tokenManager: tokenManager,
@@ -158,15 +158,15 @@ func NewTranscriberClient(config *config.Config, httpClient *http.Client, tokenM
 	}
 }
 
-func (tc *TranscriberClient) UploadFile(ctx context.Context, audio io.ReadCloser) (string, error) {
-	req, err := http.NewRequestWithContext(ctx, "POST", tc.config.Transcriber.SaluteURL+"/data:upload", audio)
+func (sc *SaluteClient) UploadFile(ctx context.Context, audio io.ReadCloser) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, "POST", sc.config.Transcriber.SaluteURL+"/data:upload", audio)
 	if err != nil {
 		return "", fmt.Errorf("failed to create request: %w", err)
 	}
 
-	req.Header.Set("Authorization", "Bearer "+tc.tokenManager.GetToken(tc.config.Transcriber.TokenManager.Scope))
+	req.Header.Set("Authorization", "Bearer "+sc.tokenManager.GetToken(sc.config.Transcriber.TokenManager.Scope))
 
-	resp, err := tc.httpClient.Do(req)
+	resp, err := sc.httpClient.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("failed to upload file: %w", err)
 	}
@@ -186,7 +186,7 @@ func (tc *TranscriberClient) UploadFile(ctx context.Context, audio io.ReadCloser
 	return uploadResp.Result.RequestFileID, nil
 }
 
-func (tc *TranscriberClient) CreateRecognitionTask(ctx context.Context, requestFileID string, audioEncoding string) (string, error) {
+func (sc *SaluteClient) CreateRecognitionTask(ctx context.Context, requestFileID string, audioEncoding string) (string, error) {
 	recognizeReq := RecognizeRequest{}
 	recognizeReq.Options.Model = "general"
 	recognizeReq.Options.AudioEncoding = audioEncoding
@@ -202,15 +202,15 @@ func (tc *TranscriberClient) CreateRecognitionTask(ctx context.Context, requestF
 		return "", fmt.Errorf("failed to marshal recognize request: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", tc.config.Transcriber.SaluteURL+"/speech:async_recognize", bytes.NewBuffer(body))
+	req, err := http.NewRequestWithContext(ctx, "POST", sc.config.Transcriber.SaluteURL+"/speech:async_recognize", bytes.NewBuffer(body))
 	if err != nil {
 		return "", fmt.Errorf("failed to create recognize request: %w", err)
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+tc.tokenManager.GetToken(tc.config.Transcriber.TokenManager.Scope))
+	req.Header.Set("Authorization", "Bearer "+sc.tokenManager.GetToken(sc.config.Transcriber.TokenManager.Scope))
 
-	resp, err := tc.httpClient.Do(req)
+	resp, err := sc.httpClient.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("failed to create recognition task: %w", err)
 	}
@@ -230,16 +230,16 @@ func (tc *TranscriberClient) CreateRecognitionTask(ctx context.Context, requestF
 	return recognizeResp.Result.ID, nil
 }
 
-func (tc *TranscriberClient) CheckTaskStatus(ctx context.Context, taskID string) (string, string, error) {
+func (sc *SaluteClient) CheckTaskStatus(ctx context.Context, taskID string) (string, string, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET",
-		fmt.Sprintf("%s/task:get?id=%s", tc.config.Transcriber.SaluteURL, taskID), nil)
+		fmt.Sprintf("%s/task:get?id=%s", sc.config.Transcriber.SaluteURL, taskID), nil)
 	if err != nil {
 		return "", "", fmt.Errorf("failed to create status request: %w", err)
 	}
 
-	req.Header.Set("Authorization", "Bearer "+tc.tokenManager.GetToken(tc.config.Transcriber.TokenManager.Scope))
+	req.Header.Set("Authorization", "Bearer "+sc.tokenManager.GetToken(sc.config.Transcriber.TokenManager.Scope))
 
-	resp, err := tc.httpClient.Do(req)
+	resp, err := sc.httpClient.Do(req)
 	if err != nil {
 		return "", "", fmt.Errorf("failed to check task status: %w", err)
 	}
@@ -259,22 +259,21 @@ func (tc *TranscriberClient) CheckTaskStatus(ctx context.Context, taskID string)
 	return statusResp.Result.Status, statusResp.Result.ResponseFileID, nil
 }
 
-func (tc *TranscriberClient) DownloadResult(ctx context.Context, responseFileID string) (*DownloadResponse, error) {
+func (sc *SaluteClient) DownloadResult(ctx context.Context, responseFileID string) (*DownloadResponse, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET",
-		fmt.Sprintf("%s/data:download?response_file_id=%s", tc.config.Transcriber.SaluteURL, responseFileID), nil)
+		fmt.Sprintf("%s/data:download?response_file_id=%s", sc.config.Transcriber.SaluteURL, responseFileID), nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create download request: %w", err)
 	}
 
-	req.Header.Set("Authorization", "Bearer "+tc.tokenManager.GetToken(tc.config.Transcriber.TokenManager.Scope))
+	req.Header.Set("Authorization", "Bearer "+sc.tokenManager.GetToken(sc.config.Transcriber.TokenManager.Scope))
 
-	resp, err := tc.httpClient.Do(req)
+	resp, err := sc.httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to download result: %w", err)
 	}
 	defer resp.Body.Close()
 
-	// Read response body for logging
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response body: %w", err)
@@ -284,7 +283,6 @@ func (tc *TranscriberClient) DownloadResult(ctx context.Context, responseFileID 
 		return nil, fmt.Errorf("download failed with status %d: %s", resp.StatusCode, string(responseBody))
 	}
 
-	// Log the response body
 	fmt.Printf("Download response body: %s\n", string(responseBody))
 
 	var downloadResp DownloadResponse
@@ -294,75 +292,4 @@ func (tc *TranscriberClient) DownloadResult(ctx context.Context, responseFileID 
 	}
 
 	return &downloadResp, nil
-}
-
-func (tc *TranscriberClient) TranscribeFile(ctx context.Context, audio io.ReadCloser, audioEncoding string) (string, error) {
-	// Step 1: Upload file
-	requestFileID, err := tc.UploadFile(ctx, audio)
-	if err != nil {
-		return "", fmt.Errorf("failed to upload file: %w", err)
-	}
-
-	// Step 2: Create recognition task
-	taskID, err := tc.CreateRecognitionTask(ctx, requestFileID, audioEncoding)
-	if err != nil {
-		return "", fmt.Errorf("failed to create recognition task: %w", err)
-	}
-
-	// Step 3: Poll for completion
-	for {
-		status, responseFileID, err := tc.CheckTaskStatus(ctx, taskID)
-		if err != nil {
-			return "", fmt.Errorf("failed to check task status: %w", err)
-		}
-
-		switch status {
-		case "DONE":
-			// Step 4: Download result
-			result, err := tc.DownloadResult(ctx, responseFileID)
-			if err != nil {
-				return "", fmt.Errorf("failed to download result: %w", err)
-			}
-
-			// Extract speaker-aware transcription
-			return tc.formatSpeakerTranscription(result), nil
-		case "ERROR":
-			return "", fmt.Errorf("transcription failed: task status is ERROR")
-		}
-
-		// Wait before polling again
-		time.Sleep(1 * time.Second)
-	}
-}
-
-
-func (tc *TranscriberClient) formatSpeakerTranscription(result *DownloadResponse) string {
-	var transcription strings.Builder
-	speakerMap := make(map[int]string)
-	speakerCounter := 1
-
-	// Process each speech result in chronological order
-	for _, speechResult := range *result {
-		// Skip results with speaker_id = -1 (end of utterance markers)
-		if speechResult.SpeakerInfo.SpeakerID == -1 {
-			continue
-		}
-
-		// Map speaker ID to readable label
-		speakerID := speechResult.SpeakerInfo.SpeakerID
-		if _, exists := speakerMap[speakerID]; !exists {
-			speakerMap[speakerID] = fmt.Sprintf("Speaker %d", speakerCounter)
-			speakerCounter++
-		}
-		speakerLabel := speakerMap[speakerID]
-
-		// Add each text result for this speaker
-		for _, textResult := range speechResult.Results {
-			if textResult.Text != "" {
-				transcription.WriteString(fmt.Sprintf("[%s]: %s\n", speakerLabel, textResult.Text))
-			}
-		}
-	}
-
-	return strings.TrimSpace(transcription.String())
 }

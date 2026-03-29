@@ -10,18 +10,37 @@ import (
 )
 
 type MeetingService struct {
-	repo   storage.MeetingRepository
-	logger *zap.Logger
+	repo     storage.MeetingRepository
+	userRepo storage.UserRepository
+	logger   *zap.Logger
 }
 
-func NewMeetingService(repo storage.MeetingRepository, logger *zap.Logger) *MeetingService {
+func NewMeetingService(repo storage.MeetingRepository, userRepo storage.UserRepository, logger *zap.Logger) *MeetingService {
 	return &MeetingService{
-		repo:   repo,
-		logger: logger,
+		repo:     repo,
+		userRepo: userRepo,
+		logger:   logger,
 	}
 }
 
 func (s *MeetingService) CreateMeeting(ctx context.Context, telegramID int64, fileId, transcription string) (*models.Meeting, error) {
+	// First, ensure the user exists in the database
+	_, err := s.userRepo.GetByTelegramID(ctx, telegramID)
+	if err != nil {
+		// User doesn't exist, create a new user record
+		user := &models.User{
+			TelegramID: telegramID,
+			CreatedAt:  models.TimeNow(),
+		}
+
+		createErr := s.userRepo.Create(ctx, user)
+		if createErr != nil {
+			s.logger.Error("Failed to create user before meeting", zap.Int64("telegram_id", telegramID), zap.Error(createErr))
+			return nil, fmt.Errorf("failed to create user: %w", createErr)
+		}
+		s.logger.Info("Created new user", zap.Int64("telegram_id", telegramID))
+	}
+
 	meeting := &models.Meeting{
 		TelegramID: telegramID,
 		FileId:     fileId,
@@ -75,4 +94,24 @@ func (s *MeetingService) UpdateMeetingSummary(ctx context.Context, telegramID in
 	}
 
 	return nil
+}
+
+func (s *MeetingService) UpdateMeetingEmbedding(ctx context.Context, telegramID int64, fileId string, embedding []float32) error {
+	err := s.repo.UpdateEmbedding(ctx, telegramID, fileId, models.FromFloat32Slice(embedding))
+	if err != nil {
+		s.logger.Error("Failed to update meeting embedding", zap.String("file_id", fileId), zap.Error(err))
+		return fmt.Errorf("failed to update meeting embedding: %w", err)
+	}
+
+	return nil
+}
+
+func (s *MeetingService) SearchMeetingsByEmbedding(ctx context.Context, telegramID int64, queryEmbedding []float32, limit, offset int) ([]models.Meeting, error) {
+	meetings, err := s.repo.SearchByEmbedding(ctx, telegramID, models.FromFloat32Slice(queryEmbedding), limit, offset)
+	if err != nil {
+		s.logger.Error("Failed to search meetings by embedding", zap.Error(err))
+		return nil, fmt.Errorf("failed to search meetings by embedding: %w", err)
+	}
+
+	return meetings, nil
 }
