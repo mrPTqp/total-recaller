@@ -13,4 +13,6 @@ type MeetingRepository interface {
 	ListByUser(ctx context.Context, telegramID int64, limit int) ([]models.Meeting, error)
 	Search(ctx context.Context, telegramID int64, query string, limit, offset int) ([]models.Meeting, error)
 	UpdateSummary(ctx context.Context, telegramID int64, fileId string, summary string) error
+	UpdateEmbedding(ctx context.Context, telegramID int64, fileId string, embedding []float32) error
+	SearchByEmbedding(ctx context.Context, telegramID int64, queryEmbedding []float32, limit, offset int) ([]models.Meeting, error)
 }

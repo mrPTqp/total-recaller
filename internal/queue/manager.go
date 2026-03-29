@@ -17,6 +17,10 @@ type QueueManager struct {
 	LLMTasks   chan LLMTask
 	LLMResults chan LLMResult
 	
+	// Embedding channels
+	EmbeddingTasks   chan EmbeddingTask
+	EmbeddingResults chan EmbeddingResult
+	
 	// Synchronization
 	wg sync.WaitGroup
 }
@@ -33,6 +37,8 @@ func NewQueueManager(cfg *config.Config) *QueueManager {
 		TranscriberResults: make(chan TranscriberResult, cfg.Transcriber.ResultBufferSize),
 		LLMTasks:           make(chan LLMTask, cfg.LLM.TaskBufferSize),
 		LLMResults:         make(chan LLMResult, cfg.LLM.ResultBufferSize),
+		EmbeddingTasks:     make(chan EmbeddingTask, cfg.LLM.TaskBufferSize),
+		EmbeddingResults:   make(chan EmbeddingResult, cfg.LLM.ResultBufferSize),
 	}
 }
 
@@ -41,6 +47,7 @@ func (qm *QueueManager) StartWorkers(
 	ctx context.Context,
 	transcriberWorker func(context.Context, *QueueManager),
 	llmWorker func(context.Context, *QueueManager),
+	embeddingWorker func(context.Context, *QueueManager),
 ) {
 	// Start transcriber worker
 	qm.wg.Add(1)
@@ -54,6 +61,13 @@ func (qm *QueueManager) StartWorkers(
 	go func() {
 		defer qm.wg.Done()
 		llmWorker(ctx, qm)
+	}()
+	
+	// Start embedding worker
+	qm.wg.Add(1)
+	go func() {
+		defer qm.wg.Done()
+		embeddingWorker(ctx, qm)
 	}()
 }
 

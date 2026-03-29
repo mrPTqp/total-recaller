@@ -87,7 +87,7 @@ func (bs *Bootstrapper) MustRun(ctx context.Context) (*AppComponents, error) {
 	meetingService := service.NewMeetingService(meetingRepo, bs.logger)
 
 	queueManager := queue.NewQueueManager(bs.cfg)
-	workerManager := queue.NewWorkerManager(bs.logger, meetingService, transcriberClient, gigachatClient)
+	workerManager := queue.NewWorkerManager(bs.logger, transcriberClient, gigachatClient)
 
 	settings := telegramm.Settings{
 		Token:  bs.cfg.BotToken,

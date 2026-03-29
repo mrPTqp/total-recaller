@@ -55,3 +55,16 @@ func (r *retryMeetingRepository) UpdateSummary(ctx context.Context, telegramID i
 	return err
 }
 
+func (r *retryMeetingRepository) UpdateEmbedding(ctx context.Context, telegramID int64, fileId string, embedding []float32) error {
+	_, err := storage.WithRetryContext(ctx, func(ctx context.Context) (interface{}, error) {
+		return nil, r.repo.UpdateEmbedding(ctx, telegramID, fileId, embedding)
+	}, r.maxAttempts, r.backoff)
+	return err
+}
+
+func (r *retryMeetingRepository) SearchByEmbedding(ctx context.Context, telegramID int64, queryEmbedding []float32, limit, offset int) ([]models.Meeting, error) {
+	return storage.WithRetryContext(ctx, func(ctx context.Context) ([]models.Meeting, error) {
+		return r.repo.SearchByEmbedding(ctx, telegramID, queryEmbedding, limit, offset)
+	}, r.maxAttempts, r.backoff)
+}
+

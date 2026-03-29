@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/mrPTqp/total-recaller/internal/llm"
-	"github.com/mrPTqp/total-recaller/internal/service"
 	"github.com/mrPTqp/total-recaller/internal/transcriber"
 	"go.uber.org/zap"
 )
@@ -14,7 +13,6 @@ import (
 // WorkerManager manages the worker goroutines
 type WorkerManager struct {
 	logger            *zap.Logger
-	meetingService    *service.MeetingService
 	transcriberClient *transcriber.TranscriberClient
 	llmClient         *llm.LLMClient
 }
@@ -22,13 +20,11 @@ type WorkerManager struct {
 // NewWorkerManager creates a new worker manager
 func NewWorkerManager(
 	logger *zap.Logger,
-	meetingService *service.MeetingService,
 	transcriberClient *transcriber.TranscriberClient,
 	llmClient *llm.LLMClient,
 ) *WorkerManager {
 	return &WorkerManager{
 		logger:            logger,
-		meetingService:    meetingService,
 		transcriberClient: transcriberClient,
 		llmClient:         llmClient,
 	}
@@ -72,6 +68,27 @@ func (wm *WorkerManager) LLMWorker(ctx context.Context, qm *QueueManager) {
 			}
 			
 			wm.processLLMTask(ctx, qm, task)
+		}
+	}
+}
+
+// EmbeddingWorker processes embedding tasks from the queue
+func (wm *WorkerManager) EmbeddingWorker(ctx context.Context, qm *QueueManager) {
+	wm.logger.Info("Starting embedding worker")
+	
+	for {
+		select {
+		case <-ctx.Done():
+			wm.logger.Info("Embedding worker shutting down")
+			return
+			
+		case task, ok := <-qm.EmbeddingTasks:
+			if !ok {
+				wm.logger.Info("Embedding tasks channel closed")
+				return
+			}
+			
+			wm.processEmbeddingTask(ctx, qm, task)
 		}
 	}
 }
@@ -202,6 +219,65 @@ func (wm *WorkerManager) processLLMTask(ctx context.Context, qm *QueueManager, t
 			zap.String("task_id", task.ID))
 	case <-ctx.Done():
 		wm.logger.Info("Context cancelled while sending LLM result",
+			zap.String("task_id", task.ID))
+	}
+}
+
+// processEmbeddingTask processes a single embedding task
+func (wm *WorkerManager) processEmbeddingTask(ctx context.Context, qm *QueueManager, task EmbeddingTask) {
+	wm.logger.Info("Processing embedding task",
+		zap.String("task_id", task.ID),
+		zap.Int64("user_id", task.UserID),
+		zap.String("file_id", task.FileID),
+		zap.Int("text_length", len(task.Text)),
+	)
+	
+	// Generate embedding using LLM client
+	embedding, err := wm.llmClient.GenerateEmbedding(ctx, task.Text)
+	if err != nil {
+		wm.logger.Error("Failed to generate embedding",
+			zap.String("task_id", task.ID),
+			zap.Error(err))
+		
+		// Send error result
+		result := EmbeddingResult{
+			TaskID:    task.ID,
+			UserID:    task.UserID,
+			Embedding: nil,
+			Error:     err,
+			CreatedAt: time.Now(),
+		}
+		
+		select {
+		case qm.EmbeddingResults <- result:
+			wm.logger.Info("Sent embedding error result",
+				zap.String("task_id", task.ID))
+		case <-ctx.Done():
+			wm.logger.Info("Context cancelled while sending embedding error result",
+				zap.String("task_id", task.ID))
+		}
+		return
+	}
+	
+	wm.logger.Info("Embedding generated successfully",
+		zap.String("task_id", task.ID),
+		zap.Int("embedding_dimensions", len(embedding)))
+	
+	// Send successful result
+	result := EmbeddingResult{
+		TaskID:    task.ID,
+		UserID:    task.UserID,
+		Embedding: embedding,
+		Error:     nil,
+		CreatedAt: time.Now(),
+	}
+	
+	select {
+	case qm.EmbeddingResults <- result:
+		wm.logger.Info("Sent embedding result",
+			zap.String("task_id", task.ID))
+	case <-ctx.Done():
+		wm.logger.Info("Context cancelled while sending embedding result",
 			zap.String("task_id", task.ID))
 	}
 }

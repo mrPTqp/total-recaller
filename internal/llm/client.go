@@ -39,6 +39,17 @@ type Choice struct {
 	Message Message `json:"message"`
 }
 
+type EmbeddingRequest struct {
+	Model string `json:"model"`
+	Input string `json:"input"`
+}
+
+type EmbeddingResponse struct {
+	Data []struct {
+		Embedding []float32 `json:"embedding"`
+	} `json:"data"`
+}
+
 func NewGigachatClient(cfg *config.Config, httpClient *http.Client, tokenManager *token.TokenManager, logger *zap.Logger) *LLMClient {
 	return &LLMClient{
 		cfg:        cfg,
@@ -55,7 +66,7 @@ func (c *LLMClient) Summarize(ctx context.Context, text string) (string, error) 
 	Ответ должен быть на русском языке.`
 
 	request := ChatRequest{
-		Model: c.cfg.LLM.Model,
+		Model: c.cfg.LLM.GenerateModel,
 		Messages: []Message{
 			{
 				Role:    "system",
@@ -126,9 +137,9 @@ func (c *LLMClient) Chat(ctx context.Context, userMessage string) (string, error
 	Твоя задача - отвечать на вопросы пользователя, помогать с различными задачами и поддерживать содержательный диалог.
 	Отвечай на русском языке, будь вежливым и полезным.`
 
-	c.logger.Info("Creating chat request with model", zap.String("model", c.cfg.LLM.Model))
+	c.logger.Info("Creating chat request with model", zap.String("model", c.cfg.LLM.GenerateModel))
 	request := ChatRequest{
-		Model: c.cfg.LLM.Model,
+		Model: c.cfg.LLM.GenerateModel,
 		Messages: []Message{
 			{
 				Role:    "system",
@@ -215,4 +226,70 @@ func (c *LLMClient) Chat(ctx context.Context, userMessage string) (string, error
 
 	c.logger.Info("Chat request completed successfully", zap.String("response", response))
 	return response, nil
+}
+
+func (c *LLMClient) GenerateEmbedding(ctx context.Context, text string) ([]float32, error) {
+	c.logger.Info("Generating embedding", zap.String("text_preview", text[:min(len(text), 100)]))
+	
+	request := EmbeddingRequest{
+		Model: c.cfg.LLM.EmbeddingModel,
+		Input: text,
+	}
+
+	token := c.tokenMgr.GetToken(c.cfg.LLM.TokenManager.Scope)
+	if token == "" {
+		return nil, fmt.Errorf("no access token available")
+	}
+
+	requestBody, err := json.Marshal(request)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	httpReq, err := http.NewRequestWithContext(ctx, "POST", "https://gigachat.devices.sberbank.ru/api/v1/embeddings", bytes.NewBuffer(requestBody))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Authorization", "Bearer "+token)
+
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("failed to make request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("API returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var embeddingResp EmbeddingResponse
+	if err := json.Unmarshal(body, &embeddingResp); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
+	}
+
+	if len(embeddingResp.Data) == 0 {
+		return nil, fmt.Errorf("no embeddings returned from API")
+	}
+
+	embedding := embeddingResp.Data[0].Embedding
+	if len(embedding) == 0 {
+		return nil, fmt.Errorf("empty embedding returned from API")
+	}
+
+	c.logger.Info("Embedding generated successfully", zap.Int("dimensions", len(embedding)))
+	return embedding, nil
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }

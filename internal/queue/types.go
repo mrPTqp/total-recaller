@@ -32,6 +32,7 @@ type LLMTaskType string
 const (
 	LLMTaskTypeSummarize LLMTaskType = "summarize"
 	LLMTaskTypeChat      LLMTaskType = "chat"
+	LLMTaskTypeEmbedding LLMTaskType = "embedding"
 )
 
 // LLMTask represents an LLM processing task
@@ -49,6 +50,24 @@ type LLMResult struct {
 	TaskID    string
 	UserID    int64
 	Response  string
+	Error     error
+	CreatedAt time.Time
+}
+
+// EmbeddingTask represents an embedding generation task
+type EmbeddingTask struct {
+	ID        string
+	UserID    int64
+	Text      string
+	FileID    string
+	CreatedAt time.Time
+}
+
+// EmbeddingResult represents the result of an embedding task
+type EmbeddingResult struct {
+	TaskID    string
+	UserID    int64
+	Embedding []float32
 	Error     error
 	CreatedAt time.Time
 }

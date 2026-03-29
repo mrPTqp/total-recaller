@@ -9,6 +9,7 @@ type Meeting struct {
 	FileId     string    `json:"file_id" db:"file_id"`
 	FullText   string    `json:"full_text" db:"full_text"`
 	Summary    string    `json:"summary" db:"summary"`
+	Embedding  []float32 `json:"embedding,omitempty" db:"embedding"` // Векторное представление текста для семантического поиска
 	CreatedAt  time.Time `json:"created_at" db:"created_at"`
 }
 

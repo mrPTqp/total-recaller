@@ -183,6 +183,25 @@ func (h *EventHandlers) processAudioTask(ctx tele.Context, user *tele.User, task
 	}
 	h.logger.Info("Meeting record created successfully", zap.Int("meeting_id", meeting.ID))
 
+	// Send embedding generation task to queue
+	embeddingTaskID := queue.GenerateMessageID()
+	embeddingTask := queue.EmbeddingTask{
+		ID:        embeddingTaskID,
+		UserID:    user.ID,
+		Text:      transcriberResult.Transcription,
+		FileID:    transcriberResult.FileID,
+		CreatedAt: time.Now(),
+	}
+
+	select {
+	case h.queueManager.EmbeddingTasks <- embeddingTask:
+		h.logger.Info("Sent embedding task to queue",
+			zap.String("task_id", embeddingTaskID))
+	default:
+		h.logger.Info("Embedding channel is full, cannot send embedding task")
+		return
+	}
+
 	// Send summarization task to LLM
 	summaryTaskID := queue.GenerateMessageID()
 	summaryTask := queue.LLMTask{
@@ -223,6 +242,27 @@ func (h *EventHandlers) processAudioTask(ctx tele.Context, user *tele.User, task
 		return
 	}
 	h.logger.Info("Meeting updated with summary successfully")
+
+	// Wait for embedding result
+	embeddingResult, err := h.waitForEmbeddingResult(wpCtx, embeddingTaskID)
+	if err != nil {
+		h.logger.Error("Failed to get embedding result", zap.Error(err))
+		return
+	}
+
+	// Handle embedding errors
+	if embeddingResult.Error != nil {
+		h.logger.Error("Failed to generate embedding", zap.Error(embeddingResult.Error))
+		return
+	}
+
+	// Update meeting with embedding
+	err = h.meetingService.UpdateMeetingEmbedding(wpCtx, user.ID, transcriberResult.FileID, embeddingResult.Embedding)
+	if err != nil {
+		h.logger.Error("Failed to update meeting with embedding", zap.Error(err))
+		return
+	}
+	h.logger.Info("Meeting updated with embedding successfully")
 
 	// Edit message with summary
 	if _, err := ctx.Bot().Edit(sentMsg, summaryResult.Response); err != nil {
@@ -274,6 +314,19 @@ func (h *EventHandlers) waitForSummarizationResult(ctx context.Context, taskID s
 		return nil, ctx.Err()
 	}
 	return nil, errors.New("summarization result not found")
+}
+
+func (h *EventHandlers) waitForEmbeddingResult(ctx context.Context, taskID string) (*queue.EmbeddingResult, error) {
+	select {
+	case result := <-h.queueManager.EmbeddingResults:
+		if result.TaskID == taskID {
+			return &result, nil
+		}
+	case <-ctx.Done():
+		h.logger.Info("Timeout while waiting for embedding result")
+		return nil, ctx.Err()
+	}
+	return nil, errors.New("embedding result not found")
 }
 
 func (h *EventHandlers) createMeetingRecord(ctx context.Context, userID int64, fileID, transcription string) (*models.Meeting, error) {

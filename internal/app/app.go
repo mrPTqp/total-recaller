@@ -38,7 +38,7 @@ func NewApp(components *AppComponents) *App {
 
 func (a *App) RunWithContext(ctx context.Context) {
 	// Start queue workers
-	a.queueManager.StartWorkers(ctx, a.workerManager.TranscriberWorker, a.workerManager.LLMWorker)
+	a.queueManager.StartWorkers(ctx, a.workerManager.TranscriberWorker, a.workerManager.LLMWorker, a.workerManager.EmbeddingWorker)
 	
 	// Start bot
 	if a.bot != nil {

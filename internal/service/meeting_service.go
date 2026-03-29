@@ -76,3 +76,23 @@ func (s *MeetingService) UpdateMeetingSummary(ctx context.Context, telegramID in
 
 	return nil
 }
+
+func (s *MeetingService) UpdateMeetingEmbedding(ctx context.Context, telegramID int64, fileId string, embedding []float32) error {
+	err := s.repo.UpdateEmbedding(ctx, telegramID, fileId, embedding)
+	if err != nil {
+		s.logger.Error("Failed to update meeting embedding", zap.String("file_id", fileId), zap.Error(err))
+		return fmt.Errorf("failed to update meeting embedding: %w", err)
+	}
+
+	return nil
+}
+
+func (s *MeetingService) SearchMeetingsByEmbedding(ctx context.Context, telegramID int64, queryEmbedding []float32, limit, offset int) ([]models.Meeting, error) {
+	meetings, err := s.repo.SearchByEmbedding(ctx, telegramID, queryEmbedding, limit, offset)
+	if err != nil {
+		s.logger.Error("Failed to search meetings by embedding", zap.Error(err))
+		return nil, fmt.Errorf("failed to search meetings by embedding: %w", err)
+	}
+
+	return meetings, nil
+}
