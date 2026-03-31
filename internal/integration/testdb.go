@@ -1,13 +1,15 @@
-package storage
+package integration
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
-	_ "github.com/jackc/pgx/v5/stdlib"
+	_ "github.com/jackc/pgx/v5/stdlib" // Import postgres driver
 	"github.com/pressly/goose/v3"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
@@ -158,4 +160,62 @@ func runMigrations(connStr, migrationsPath string) error {
 	}
 
 	return nil
+}
+
+// User represents a user in the database for testing purposes
+type User struct {
+	ID         int64
+	TelegramID int64
+	CreatedAt  time.Time
+}
+
+// GetUserByTelegramID retrieves a user by their Telegram ID
+func (tdb *TestDB) GetUserByTelegramID(ctx context.Context, telegramID int64) (*User, error) {
+	db, err := sql.Open("pgx", tdb.ConnStr)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open db: %w", err)
+	}
+	defer db.Close()
+
+	var user User
+	err = db.QueryRowContext(ctx, "SELECT id, telegram_id, created_at FROM users WHERE telegram_id = $1", telegramID).
+		Scan(&user.ID, &user.TelegramID, &user.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+
+	return &user, nil
+}
+
+// CreateTestMeeting creates a test meeting for a user and returns the meeting ID
+func (tdb *TestDB) CreateTestMeeting(ctx context.Context, telegramID int64, transcription string) (int, error) {
+	db, err := sql.Open("pgx", tdb.ConnStr)
+	if err != nil {
+		return 0, fmt.Errorf("failed to open db: %w", err)
+	}
+	defer db.Close()
+
+	// Ensure user exists
+	_, err = db.ExecContext(ctx, `
+		INSERT INTO users (telegram_id, created_at) 
+		VALUES ($1, $2) 
+		ON CONFLICT (telegram_id) DO NOTHING`,
+		telegramID, time.Now())
+	if err != nil {
+		return 0, fmt.Errorf("failed to ensure user exists: %w", err)
+	}
+
+	// Create meeting
+	var meetingID int
+	err = db.QueryRowContext(ctx, `
+		INSERT INTO meetings (telegram_id, file_id, full_text, created_at) 
+		VALUES ($1, $2, $3, $4) 
+		RETURNING id`,
+		telegramID, fmt.Sprintf("test_file_%d", time.Now().UnixNano()), transcription, time.Now()).
+		Scan(&meetingID)
+	if err != nil {
+		return 0, fmt.Errorf("failed to create meeting: %w", err)
+	}
+
+	return meetingID, nil
 }

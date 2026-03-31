@@ -92,6 +92,7 @@ func (bs *Bootstrapper) MustRun(ctx context.Context) (*AppComponents, error) {
 	settings := telegramm.Settings{
 		Token:  bs.cfg.BotToken,
 		Poller: &telegramm.LongPoller{Timeout: 10 * time.Second},
+		URL:    bs.cfg.Bot.TelegramAPIURL, //for integration tests
 	}
 
 	tbot, err := telegramm.NewBot(settings)
@@ -134,4 +135,38 @@ type AppComponents struct {
 	TranscriberClient *transcriber.TranscriberClient
 	QueueManager      *queue.QueueManager
 	WorkerManager     *queue.WorkerManager
+}
+
+// telegramAPIURLTransport is a custom http.RoundTripper that redirects
+// Telegram Bot API requests to a custom base URL (e.g., a mock server).
+type telegramAPIURLTransport struct {
+	baseURL string
+	base    http.RoundTripper
+}
+
+// RoundTrip implements http.RoundTripper.
+func (t *telegramAPIURLTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	// Parse the baseURL to extract host
+	// Expected format: http://host:port/botTOKEN
+	// We need to redirect to http://host:port/botTOKEN/method
+	req.URL.Scheme = "http"
+
+	// Extract host from baseURL (remove http:// prefix)
+	host := t.baseURL
+	if len(host) > 7 && host[:7] == "http://" {
+		host = host[7:]
+	}
+	// Remove path from host if present
+	if idx := len(host); idx > 0 {
+		// Find the first / after the host:port
+		for i, c := range host {
+			if c == '/' {
+				host = host[:i]
+				break
+			}
+		}
+	}
+	req.URL.Host = host
+	req.Host = host
+	return t.base.RoundTrip(req)
 }

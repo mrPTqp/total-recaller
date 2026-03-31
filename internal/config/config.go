@@ -11,10 +11,11 @@ import (
 
 type Config struct {
 	Bot struct {
-		Username     string `mapstructure:"username"`
-		PoolSize     int    `mapstructure:"pool_size"`
-		MaxQueueSize int    `mapstructure:"max_queue_size"`
-		MaxFileSize  int64  `mapstructure:"max_file_size"`
+		Username       string `mapstructure:"username"`
+		PoolSize       int    `mapstructure:"pool_size"`
+		MaxQueueSize   int    `mapstructure:"max_queue_size"`
+		MaxFileSize    int64  `mapstructure:"max_file_size"`
+		TelegramAPIURL string `mapstructure:"telegram_api_url"` //for integration tests
 	} `mapstructure:"bot"`
 	Database struct {
 		Retry struct {
@@ -118,7 +119,8 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("bot.username", "")
 	v.SetDefault("bot.pool_size", 10)
 	v.SetDefault("bot.max_queue_size", 100)
-	v.SetDefault("bot.max_file_size", 20971520) // 20MB in bytes
+	v.SetDefault("bot.max_file_size", 20971520)                      // 20MB in bytes
+	v.SetDefault("bot.telegram_api_url", "https://api.telegram.org") // Default Telegram Bot API URL
 	v.SetDefault("database.retry.max_attempts", 3)
 	v.SetDefault("database.retry.backoff", "1s")
 	v.SetDefault("database.pool.max_open_conns", 25)
