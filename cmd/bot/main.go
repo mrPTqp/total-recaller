@@ -14,8 +14,6 @@ import (
 )
 
 //TODO new go features
-//TODO add logging
-//TODO add tests
 //TODO classify errors
 
 func main() {
