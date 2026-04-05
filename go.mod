@@ -1,6 +1,6 @@
 module github.com/mrPTqp/total-recaller
 
-go 1.25.0
+go 1.26.1
 
 require go.uber.org/zap v1.27.1
 
@@ -82,6 +82,7 @@ require (
 	github.com/gammazero/deque v1.2.1 // indirect
 	github.com/go-viper/mapstructure/v2 v2.2.1 // indirect
 	github.com/google/uuid v1.6.0
+	github.com/jackc/pgerrcode v0.0.0-20250907135507-afb5586c32a6
 	github.com/pelletier/go-toml/v2 v2.2.3 // indirect
 	github.com/sagikazarmark/locafero v0.7.0 // indirect
 	github.com/sourcegraph/conc v0.3.0 // indirect

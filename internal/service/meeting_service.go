@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"iter"
 
 	"github.com/mrPTqp/total-recaller/internal/models"
 	"github.com/mrPTqp/total-recaller/internal/storage"
@@ -66,24 +67,12 @@ func (s *MeetingService) GetMeeting(ctx context.Context, id int, telegramID int6
 	return meeting, nil
 }
 
-func (s *MeetingService) ListMeetings(ctx context.Context, telegramID int64) ([]models.Meeting, error) {
-	meetings, err := s.repo.ListByUser(ctx, telegramID, 100)
-	if err != nil {
-		s.logger.Error("Failed to list meetings", zap.Error(err))
-		return nil, fmt.Errorf("failed to list meetings: %w", err)
-	}
-
-	return meetings, nil
+func (s *MeetingService) ListMeetings(ctx context.Context, telegramID int64) iter.Seq[models.Meeting] {
+	return s.repo.ListByUser(ctx, telegramID)
 }
 
-func (s *MeetingService) SearchMeetings(ctx context.Context, telegramID int64, query string, limit, offset int) ([]models.Meeting, error) {
-	meetings, err := s.repo.Search(ctx, telegramID, query, limit, offset)
-	if err != nil {
-		s.logger.Error("Failed to search meetings", zap.String("query", query), zap.Error(err))
-		return nil, fmt.Errorf("failed to search meetings: %w", err)
-	}
-
-	return meetings, nil
+func (s *MeetingService) SearchMeetings(ctx context.Context, telegramID int64, query string) iter.Seq[models.Meeting] {
+	return s.repo.Search(ctx, telegramID, query)
 }
 
 func (s *MeetingService) UpdateMeetingSummary(ctx context.Context, telegramID int64, fileId string, summary string) error {
@@ -106,12 +95,6 @@ func (s *MeetingService) UpdateMeetingEmbedding(ctx context.Context, telegramID 
 	return nil
 }
 
-func (s *MeetingService) SearchMeetingsByEmbedding(ctx context.Context, telegramID int64, queryEmbedding []float32, limit, offset int) ([]models.Meeting, error) {
-	meetings, err := s.repo.SearchByEmbedding(ctx, telegramID, models.FromFloat32Slice(queryEmbedding), limit, offset)
-	if err != nil {
-		s.logger.Error("Failed to search meetings by embedding", zap.Error(err))
-		return nil, fmt.Errorf("failed to search meetings by embedding: %w", err)
-	}
-
-	return meetings, nil
+func (s *MeetingService) SearchMeetingsByEmbedding(ctx context.Context, telegramID int64, queryEmbedding []float32, limit, offset int) iter.Seq[models.Meeting] {
+	return s.repo.SearchByEmbedding(ctx, telegramID, models.FromFloat32Slice(queryEmbedding), limit, offset)
 }

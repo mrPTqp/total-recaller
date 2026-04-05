@@ -54,10 +54,15 @@ func (bs *Bootstrapper) MustRun(ctx context.Context) (*AppComponents, error) {
 		bs.cfg.Database.Retry.Backoff,
 	)
 
+	caCertPool, err := bs.cfg.LoadCertPool()
+	if err != nil {
+		return nil, fmt.Errorf("failed to load CA certificate: %w", err)
+	}
+
 	tokenManagerHttpClient := &http.Client{
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: true,
+				RootCAs: caCertPool,
 			},
 		},
 	}
@@ -65,7 +70,7 @@ func (bs *Bootstrapper) MustRun(ctx context.Context) (*AppComponents, error) {
 	transcriberHttpClient := &http.Client{
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: true,
+				RootCAs: caCertPool,
 			},
 		},
 	}
@@ -73,7 +78,7 @@ func (bs *Bootstrapper) MustRun(ctx context.Context) (*AppComponents, error) {
 	LLMHttpClient := &http.Client{
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{
-				InsecureSkipVerify: true,
+				RootCAs: caCertPool,
 			},
 		},
 	}

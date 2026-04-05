@@ -77,23 +77,19 @@ func (h *CommandHandlers) HandleList(ctx tele.Context) error {
 		ctxWithTimeout, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 
-		meetings, err := h.meetingService.ListMeetings(ctxWithTimeout, ctx.Sender().ID)
-		if err != nil {
-			h.logger.Error("Failed to list meetings", zap.Error(err))
-			ctx.Send("Ошибка при получении списка встреч")
-			return
-		}
-
-		if len(meetings) == 0 {
-			ctx.Send("У вас пока нет сохраненных встреч")
-			return
-		}
-
 		var message strings.Builder
 		message.WriteString("Список встреч:\n\n")
-		for i, meeting := range meetings {
-			fmt.Fprintf(&message, "%d. %s (ID: %d)\n", i+1,
+
+		count := 0
+		for meeting := range h.meetingService.ListMeetings(ctxWithTimeout, ctx.Sender().ID) {
+			count++
+			fmt.Fprintf(&message, "%d. %s (ID: %d)\n", count,
 				meeting.CreatedAt.Format("2006-01-02 15:04"), meeting.ID)
+		}
+
+		if count == 0 {
+			ctx.Send("У вас пока нет сохраненных встреч")
+			return
 		}
 
 		ctx.Send(message.String())
@@ -152,23 +148,19 @@ func (h *CommandHandlers) HandleFind(ctx tele.Context) error {
 		ctxWithTimeout, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 
-		meetings, err := h.meetingService.SearchMeetings(ctxWithTimeout, ctx.Sender().ID, query, 100, 0)
-		if err != nil {
-			h.logger.Error("Failed to search meetings", zap.String("query", query), zap.Error(err))
-			ctx.Send("Ошибка при поиске встреч")
-			return
-		}
-
-		if len(meetings) == 0 {
-			ctx.Send("По вашему запросу ничего не найдено")
-			return
-		}
-
 		var message strings.Builder
 		message.WriteString("Результаты поиска:\n\n")
-		for i, meeting := range meetings {
-			fmt.Fprintf(&message, "%d. %s (ID: %d)\n", i+1,
+
+		count := 0
+		for meeting := range h.meetingService.SearchMeetings(ctxWithTimeout, ctx.Sender().ID, query) {
+			count++
+			fmt.Fprintf(&message, "%d. %s (ID: %d)\n", count,
 				meeting.CreatedAt.Format("2006-01-02 15:04"), meeting.ID)
+		}
+
+		if count == 0 {
+			ctx.Send("По вашему запросу ничего не найдено")
+			return
 		}
 
 		ctx.Send(message.String())
@@ -279,24 +271,20 @@ func (h *CommandHandlers) HandleSemanticFind(ctx tele.Context) error {
 			return
 		}
 
-		// Search meetings by embedding
-		meetings, err := h.meetingService.SearchMeetingsByEmbedding(ctxWithTimeout, ctx.Sender().ID, queryEmbedding, 100, 0)
-		if err != nil {
-			h.logger.Error("Failed to search meetings by embedding", zap.String("query", query), zap.Error(err))
-			ctx.Send("Ошибка при поиске встреч")
-			return
-		}
-
-		if len(meetings) == 0 {
-			ctx.Send("По вашему запросу ничего не найдено")
-			return
-		}
-
+		// Search meetings by embedding using iterator
 		var message strings.Builder
 		message.WriteString("Результаты семантического поиска:\n\n")
-		for i, meeting := range meetings {
-			fmt.Fprintf(&message, "%d. %s (ID: %d)\n", i+1,
+
+		count := 0
+		for meeting := range h.meetingService.SearchMeetingsByEmbedding(ctxWithTimeout, ctx.Sender().ID, queryEmbedding, 100, 0) {
+			count++
+			fmt.Fprintf(&message, "%d. %s (ID: %d)\n", count,
 				meeting.CreatedAt.Format("2006-01-02 15:04"), meeting.ID)
+		}
+
+		if count == 0 {
+			ctx.Send("По вашему запросу ничего не найдено")
+			return
 		}
 
 		ctx.Send(message.String())

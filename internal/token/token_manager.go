@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 
 	"github.com/google/uuid"
 	"github.com/mrPTqp/total-recaller/internal/config"
@@ -17,6 +18,7 @@ type TokenManager struct {
 	config           *config.Config
 	transcriberToken string
 	llmToken         string
+	mu               sync.RWMutex
 	httpClient       *http.Client
 	logger           *zap.Logger
 }
@@ -88,9 +90,13 @@ func (tm *TokenManager) RefreshToken(ctx context.Context, scope string) error {
 
 	switch scope {
 	case tm.config.Transcriber.TokenManager.Scope:
+		tm.mu.Lock()
 		tm.transcriberToken = tokenResp.AccessToken
+		tm.mu.Unlock()
 	case tm.config.LLM.TokenManager.Scope:
+		tm.mu.Lock()
 		tm.llmToken = tokenResp.AccessToken
+		tm.mu.Unlock()
 	default:
 		tm.logger.Error("unknown scope", zap.String("scope", scope))
 	}
@@ -99,6 +105,9 @@ func (tm *TokenManager) RefreshToken(ctx context.Context, scope string) error {
 }
 
 func (tm *TokenManager) GetToken(scope string) string {
+	tm.mu.RLock()
+	defer tm.mu.RUnlock()
+
 	switch scope {
 	case tm.config.Transcriber.TokenManager.Scope:
 		return tm.transcriberToken

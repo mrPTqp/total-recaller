@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"fmt"
+	"iter"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/mrPTqp/total-recaller/internal/models"
@@ -49,8 +50,7 @@ func (r *postgresMeetingRepository) prepareStatements() {
 		SELECT id, telegram_id, file_id, full_text, summary, embedding, created_at
 		FROM meetings 
 		WHERE telegram_id = $1
-		ORDER BY created_at DESC 
-		LIMIT $2`)
+		ORDER BY created_at DESC`)
 	if err != nil {
 		panic(fmt.Errorf("failed to prepare list by user statement: %w", err))
 	}
@@ -59,8 +59,7 @@ func (r *postgresMeetingRepository) prepareStatements() {
 		SELECT id, telegram_id, file_id, full_text, summary, embedding, created_at
 		FROM meetings 
 		WHERE telegram_id = $1 AND full_text_tsvector @@ plainto_tsquery('russian', $2)
-		ORDER BY created_at DESC 
-		LIMIT $3 OFFSET $4`)
+		ORDER BY created_at DESC`)
 	if err != nil {
 		panic(fmt.Errorf("failed to prepare search statement: %w", err))
 	}
@@ -77,8 +76,7 @@ func (r *postgresMeetingRepository) prepareStatements() {
 		SELECT id, telegram_id, file_id, full_text, summary, embedding, created_at
 		FROM meetings 
 		WHERE telegram_id = $1
-		ORDER BY embedding <=> $2
-		LIMIT $3 OFFSET $4`)
+		ORDER BY embedding <=> $2`)
 	if err != nil {
 		panic(fmt.Errorf("failed to prepare search by embedding statement: %w", err))
 	}
@@ -111,24 +109,24 @@ func (r *postgresMeetingRepository) GetByID(ctx context.Context, id int, telegra
 	return &meeting, nil
 }
 
-func (r *postgresMeetingRepository) ListByUser(ctx context.Context, telegramID int64, limit int) ([]models.Meeting, error) {
-	var meetings []models.Meeting
-	err := r.listByUserStmt.SelectContext(ctx, &meetings, telegramID, limit)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list meetings: %w", err)
+func (r *postgresMeetingRepository) Search(ctx context.Context, telegramID int64, query string) iter.Seq[models.Meeting] {
+	return func(yield func(models.Meeting) bool) {
+		rows, err := r.searchStmt.QueryxContext(ctx, telegramID, query)
+		if err != nil {
+			return
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var meeting models.Meeting
+			if err := rows.StructScan(&meeting); err != nil {
+				return
+			}
+			if !yield(meeting) {
+				return
+			}
+		}
 	}
-
-	return meetings, nil
-}
-
-func (r *postgresMeetingRepository) Search(ctx context.Context, telegramID int64, query string, limit, offset int) ([]models.Meeting, error) {
-	var meetings []models.Meeting
-	err := r.searchStmt.SelectContext(ctx, &meetings, telegramID, query, limit, offset)
-	if err != nil {
-		return nil, fmt.Errorf("failed to search meetings: %w", err)
-	}
-
-	return meetings, nil
 }
 
 func (r *postgresMeetingRepository) UpdateSummary(ctx context.Context, telegramID int64, fileId string, summary string) error {
@@ -165,12 +163,42 @@ func (r *postgresMeetingRepository) UpdateEmbedding(ctx context.Context, telegra
 	return tx.Commit()
 }
 
-func (r *postgresMeetingRepository) SearchByEmbedding(ctx context.Context, telegramID int64, queryEmbedding models.Vector, limit, offset int) ([]models.Meeting, error) {
-	var meetings []models.Meeting
-	err := r.searchByEmbeddingStmt.SelectContext(ctx, &meetings, telegramID, queryEmbedding, limit, offset)
-	if err != nil {
-		return nil, fmt.Errorf("failed to search meetings by embedding: %w", err)
-	}
+func (r *postgresMeetingRepository) SearchByEmbedding(ctx context.Context, telegramID int64, queryEmbedding models.Vector, limit, offset int) iter.Seq[models.Meeting] {
+	return func(yield func(models.Meeting) bool) {
+		rows, err := r.searchByEmbeddingStmt.QueryxContext(ctx, telegramID, queryEmbedding)
+		if err != nil {
+			return
+		}
+		defer rows.Close()
 
-	return meetings, nil
+		for rows.Next() {
+			var meeting models.Meeting
+			if err := rows.StructScan(&meeting); err != nil {
+				return
+			}
+			if !yield(meeting) {
+				return
+			}
+		}
+	}
+}
+
+func (r *postgresMeetingRepository) ListByUser(ctx context.Context, telegramID int64) iter.Seq[models.Meeting] {
+	return func(yield func(models.Meeting) bool) {
+		rows, err := r.listByUserStmt.QueryxContext(ctx, telegramID)
+		if err != nil {
+			return
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var meeting models.Meeting
+			if err := rows.StructScan(&meeting); err != nil {
+				return
+			}
+			if !yield(meeting) {
+				return
+			}
+		}
+	}
 }

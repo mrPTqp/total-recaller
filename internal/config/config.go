@@ -1,7 +1,9 @@
 package config
 
 import (
+	"crypto/x509"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -17,6 +19,7 @@ type Config struct {
 		MaxFileSize    int64  `mapstructure:"max_file_size"`
 		TelegramAPIURL string `mapstructure:"telegram_api_url"` //for integration tests
 	} `mapstructure:"bot"`
+	CACertPath     string `mapstructure:"ca_cert_path"`
 	Database struct {
 		Retry struct {
 			MaxAttempts int           `mapstructure:"max_attempts"`
@@ -140,6 +143,19 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("llm.embedding_model", "Embeddings-2")
 	v.SetDefault("llm.task_buffer_size", 100)
 	v.SetDefault("llm.result_buffer_size", 100)
+	v.SetDefault("ca_cert_path", "assets/Russian_Trusted_Root_CA.crt")
+}
+
+func (c *Config) LoadCertPool() (*x509.CertPool, error) {
+	caCert, err := os.ReadFile(c.CACertPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read CA certificate: %w", err)
+	}
+	caCertPool := x509.NewCertPool()
+	if !caCertPool.AppendCertsFromPEM(caCert) {
+		return nil, fmt.Errorf("failed to parse CA certificate")
+	}
+	return caCertPool, nil
 }
 
 func validateConfig(cfg *Config) error {
