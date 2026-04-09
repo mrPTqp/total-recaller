@@ -186,11 +186,14 @@ func (h *EventHandlers) processAudioTask(ctx tele.Context, user *tele.User, task
 		CreatedAt: time.Now(),
 	}
 
+	embeddingResultChan := h.queueManager.RegisterEmbeddingWaiter(embeddingTaskID)
+
 	select {
 	case h.queueManager.EmbeddingTasks <- embeddingTask:
 		h.logger.Info("Sent embedding task to queue",
 			zap.String("task_id", embeddingTaskID))
 	default:
+		h.queueManager.UnregisterEmbeddingWaiter(embeddingTaskID)
 		h.logger.Info("Embedding channel is full, cannot send embedding task")
 		return
 	}
@@ -205,18 +208,26 @@ func (h *EventHandlers) processAudioTask(ctx tele.Context, user *tele.User, task
 		CreatedAt: time.Now(),
 	}
 
+	summaryResultChan := h.queueManager.RegisterLLMWaiter(summaryTaskID)
+
 	select {
 	case h.queueManager.LLMTasks <- summaryTask:
 		h.logger.Info("Sent summarization task to LLM queue",
 			zap.String("task_id", summaryTaskID))
 	default:
+		h.queueManager.UnregisterLLMWaiter(summaryTaskID)
+		h.queueManager.UnregisterEmbeddingWaiter(embeddingTaskID)
 		h.logger.Info("LLM channel is full, cannot send summarization task")
 		return
 	}
 
-	summaryResult, err := h.waitForSummarizationResult(wpCtx, summaryTaskID)
-	if err != nil {
-		h.logger.Error("Failed to get summarization result", zap.Error(err))
+	var summaryResult *queue.LLMResult
+	select {
+	case result := <-summaryResultChan:
+		summaryResult = &result
+	case <-wpCtx.Done():
+		h.queueManager.UnregisterEmbeddingWaiter(embeddingTaskID)
+		h.logger.Info("Timeout while waiting for summarization result")
 		return
 	}
 
@@ -232,9 +243,12 @@ func (h *EventHandlers) processAudioTask(ctx tele.Context, user *tele.User, task
 	}
 	h.logger.Info("Meeting updated with summary successfully")
 
-	embeddingResult, err := h.waitForEmbeddingResult(wpCtx, embeddingTaskID)
-	if err != nil {
-		h.logger.Error("Failed to get embedding result", zap.Error(err))
+	var embeddingResult *queue.EmbeddingResult
+	select {
+	case result := <-embeddingResultChan:
+		embeddingResult = &result
+	case <-wpCtx.Done():
+		h.logger.Info("Timeout while waiting for embedding result")
 		return
 	}
 
@@ -276,42 +290,43 @@ func (h *EventHandlers) downloadAudioFile(ctx tele.Context, fileID string) (io.R
 }
 
 func (h *EventHandlers) waitForTranscriptionResult(ctx context.Context, taskID string) (*queue.TranscriberResult, error) {
+	resultChan := h.queueManager.RegisterTranscriberWaiter(taskID)
+	defer h.queueManager.UnregisterTranscriberWaiter(taskID)
+
 	select {
-	case result := <-h.queueManager.TranscriberResults:
-		if result.TaskID == taskID {
-			return &result, nil
-		}
+	case result := <-resultChan:
+		return &result, nil
 	case <-ctx.Done():
 		h.logger.Info("Timeout while waiting for transcription result")
 		return nil, ctx.Err()
 	}
-	return nil, errors.New("transcription result not found")
 }
 
 func (h *EventHandlers) waitForSummarizationResult(ctx context.Context, taskID string) (*queue.LLMResult, error) {
+	resultChan := h.queueManager.RegisterLLMWaiter(taskID)
+	defer h.queueManager.UnregisterLLMWaiter(taskID)
+
 	select {
-	case result := <-h.queueManager.LLMResults:
-		if result.TaskID == taskID {
-			return &result, nil
-		}
+	case result := <-resultChan:
+		return &result, nil
 	case <-ctx.Done():
 		h.logger.Info("Timeout while waiting for summarization result")
 		return nil, ctx.Err()
 	}
-	return nil, errors.New("summarization result not found")
 }
 
 func (h *EventHandlers) waitForEmbeddingResult(ctx context.Context, taskID string) (*queue.EmbeddingResult, error) {
+	// Регистрируем персональный канал для ожидания результата
+	resultChan := h.queueManager.RegisterEmbeddingWaiter(taskID)
+	defer h.queueManager.UnregisterEmbeddingWaiter(taskID)
+
 	select {
-	case result := <-h.queueManager.EmbeddingResults:
-		if result.TaskID == taskID {
-			return &result, nil
-		}
+	case result := <-resultChan:
+		return &result, nil
 	case <-ctx.Done():
 		h.logger.Info("Timeout while waiting for embedding result")
 		return nil, ctx.Err()
 	}
-	return nil, errors.New("embedding result not found")
 }
 
 func (h *EventHandlers) createMeetingRecord(ctx context.Context, userID int64, fileID, transcription string) (*models.Meeting, error) {

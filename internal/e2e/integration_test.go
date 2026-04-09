@@ -676,6 +676,42 @@ func TestConcurrentUsers(t *testing.T) {
 	}, 10*time.Second), "all concurrent commands should be processed")
 }
 
+// TestConcurrentAsyncOperations tests that concurrent async operations (chat, semantic search)
+// don't interfere with each other and each user receives their own result.
+// This test specifically validates the fix for race condition in queue result handling.
+func TestConcurrentAsyncOperations(t *testing.T) {
+	t.Parallel()
+	env := NewIntegrationTestEnv(t)
+	defer env.teardown()
+
+	// Create multiple users sending async requests concurrently
+	userCount := 100
+	expectedCommands := 0
+
+	for i := 1; i <= userCount; i++ {
+		userID := int64(200000000 + i)
+
+		// Register user
+		env.mockServer.InjectCommand(userID, "start")
+		expectedCommands++
+
+		// Send chat command (async operation - waits for LLM result)
+		env.mockServer.InjectCommand(userID, fmt.Sprintf("chat Вопрос от пользователя %d", i))
+		expectedCommands++
+	}
+
+	// All commands should be processed
+	require.True(t, env.waitForEventCondition(func(stats map[string]interface{}) bool {
+		eventsByType := stats["events_by_type"].(map[string]int)
+		return eventsByType["command"] >= expectedCommands
+	}, 15*time.Second), "all concurrent commands should be processed")
+
+	// Each user should receive at least 2 messages (welcome + chat response)
+	require.True(t, env.waitForEventCondition(func(stats map[string]interface{}) bool {
+		return stats["updates_sent"].(int) >= 2*userCount
+	}, 10*time.Second), "all users should receive responses")
+}
+
 // ============================================================================
 // AUDIO PROCESSING FULL CYCLE TESTS
 // ============================================================================

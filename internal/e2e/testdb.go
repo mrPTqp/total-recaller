@@ -165,8 +165,13 @@ func (sp *SharedPostgres) dropTestDatabase(ctx context.Context, dbName string) e
 	}
 	defer db.Close()
 
+	// Create a fresh context for cleanup operations to avoid context.Canceled errors
+	// when the parent context has been canceled during test teardown
+	cleanupCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
 	// Terminate all connections to the database first
-	_, err = db.ExecContext(ctx, fmt.Sprintf(`
+	_, err = db.ExecContext(cleanupCtx, fmt.Sprintf(`
 		SELECT pg_terminate_backend(pid) 
 		FROM pg_stat_activity 
 		WHERE datname = '%s' AND pid <> pg_backend_pid()`, dbName))
@@ -176,7 +181,7 @@ func (sp *SharedPostgres) dropTestDatabase(ctx context.Context, dbName string) e
 	}
 
 	// Drop the database
-	_, err = db.ExecContext(ctx, fmt.Sprintf(`DROP DATABASE IF EXISTS "%s"`, dbName))
+	_, err = db.ExecContext(cleanupCtx, fmt.Sprintf(`DROP DATABASE IF EXISTS "%s"`, dbName))
 	if err != nil {
 		return fmt.Errorf("failed to drop database %s: %w", dbName, err)
 	}
@@ -241,7 +246,11 @@ func (tdb *TestDB) Close(ctx context.Context) error {
 	if tdb.dbName != "" {
 		shared := globalSharedPostgres
 		if shared != nil {
-			return shared.dropTestDatabase(ctx, tdb.dbName)
+			// Use a fresh context for cleanup to avoid context.Canceled errors
+			// when the parent context has been canceled during test teardown
+			cleanupCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			defer cancel()
+			return shared.dropTestDatabase(cleanupCtx, tdb.dbName)
 		}
 	}
 	return nil

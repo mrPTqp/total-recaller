@@ -13,9 +13,6 @@ import (
 	"github.com/mrPTqp/total-recaller/pkg/logger"
 )
 
-//TODO new go features
-//TODO classify errors
-
 func main() {
 	log, err := zap.NewProduction()
 	if err != nil {

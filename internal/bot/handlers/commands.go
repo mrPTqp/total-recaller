@@ -24,6 +24,32 @@ type CommandHandlers struct {
 	queueManager   *queue.QueueManager
 }
 
+func (h *CommandHandlers) waitForSummarizationResult(ctx context.Context, taskID string) (*queue.LLMResult, error) {
+	resultChan := h.queueManager.RegisterLLMWaiter(taskID)
+	defer h.queueManager.UnregisterLLMWaiter(taskID)
+
+	select {
+	case result := <-resultChan:
+		return &result, nil
+	case <-ctx.Done():
+		h.logger.Info("Timeout while waiting for summarization result")
+		return nil, ctx.Err()
+	}
+}
+
+func (h *CommandHandlers) waitForEmbeddingResult(ctx context.Context, taskID string) (*queue.EmbeddingResult, error) {
+	resultChan := h.queueManager.RegisterEmbeddingWaiter(taskID)
+	defer h.queueManager.UnregisterEmbeddingWaiter(taskID)
+
+	select {
+	case result := <-resultChan:
+		return &result, nil
+	case <-ctx.Done():
+		h.logger.Info("Timeout while waiting for embedding result")
+		return nil, ctx.Err()
+	}
+}
+
 func NewCommandHandlers(
 	logger *zap.Logger,
 	wp *workerpool.WorkerPool,
@@ -201,22 +227,21 @@ func (h *CommandHandlers) HandleChat(ctx tele.Context) error {
 		ctxWithTimeout, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 		defer cancel()
 
-		select {
-		case result := <-h.queueManager.LLMResults:
-			if result.TaskID == taskID {
-				if result.Error != nil {
-					h.logger.Error("Failed to get response from LLM", zap.Error(result.Error))
-					ctx.Send("Извините, произошла ошибка при обработке вашего запроса. Пожалуйста, попробуйте позже.")
-					return
-				}
-
-				h.logger.Info("Successfully received response from LLM", zap.String("response", result.Response))
-				ctx.Send(result.Response)
-			}
-		case <-ctxWithTimeout.Done():
+		result, err := h.waitForSummarizationResult(ctxWithTimeout, taskID)
+		if err != nil {
 			h.logger.Info("Timeout while waiting for LLM response")
 			ctx.Send("Извините, запрос обрабатывается слишком долго. Пожалуйста, попробуйте позже.")
+			return
 		}
+
+		if result.Error != nil {
+			h.logger.Error("Failed to get response from LLM", zap.Error(result.Error))
+			ctx.Send("Извините, произошла ошибка при обработке вашего запроса. Пожалуйста, попробуйте позже.")
+			return
+		}
+
+		h.logger.Info("Successfully received response from LLM", zap.String("response", result.Response))
+		ctx.Send(result.Response)
 	}()
 
 	return nil
@@ -254,29 +279,24 @@ func (h *CommandHandlers) HandleSemanticFind(ctx tele.Context) error {
 			return
 		}
 
-		var queryEmbedding []float32
-		select {
-		case result := <-h.queueManager.EmbeddingResults:
-			if result.TaskID == embeddingTaskID {
-				if result.Error != nil {
-					h.logger.Error("Failed to generate query embedding", zap.Error(result.Error))
-					ctx.Send("Извините, произошла ошибка при обработке запроса. Пожалуйста, попробуйте позже.")
-					return
-				}
-				queryEmbedding = result.Embedding
-			}
-		case <-ctxWithTimeout.Done():
+		result, err := h.waitForEmbeddingResult(ctxWithTimeout, embeddingTaskID)
+		if err != nil {
 			h.logger.Info("Timeout while waiting for query embedding")
 			ctx.Send("Извините, запрос обрабатывается слишком долго. Пожалуйста, попробуйте позже.")
 			return
 		}
 
-		// Search meetings by embedding using iterator
+		if result.Error != nil {
+			h.logger.Error("Failed to generate query embedding", zap.Error(result.Error))
+			ctx.Send("Извините, произошла ошибка при обработке запроса. Пожалуйста, попробуйте позже.")
+			return
+		}
+
 		var message strings.Builder
 		message.WriteString("Результаты семантического поиска:\n\n")
 
 		count := 0
-		for meeting := range h.meetingService.SearchMeetingsByEmbedding(ctxWithTimeout, ctx.Sender().ID, queryEmbedding, 100, 0) {
+		for meeting := range h.meetingService.SearchMeetingsByEmbedding(ctxWithTimeout, ctx.Sender().ID, result.Embedding, 100, 0) {
 			count++
 			fmt.Fprintf(&message, "%d. %s (ID: %d)\n", count,
 				meeting.CreatedAt.Format("2006-01-02 15:04"), meeting.ID)

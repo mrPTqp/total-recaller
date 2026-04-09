@@ -85,18 +85,9 @@ func (wm *WorkerManager) processTranscriberTask(ctx context.Context, qm *QueueMa
 			CreatedAt:     time.Now(),
 		}
 
-		select {
-		case <-ctx.Done():
-			wm.logger.Info("Context cancelled while sending transcriber error result",
-				zap.String("task_id", task.ID),
-			)
-			return
-		case qm.TranscriberResults <- result:
-			wm.logger.Info("Sent transcriber error result",
-				zap.String("task_id", task.ID),
-			)
-			return
-		}
+		// Отправляем результат через персональный канал ожидающей горутины
+		wm.sendTranscriberResult(ctx, qm, task.ID, result)
+		return
 	}
 
 	wm.logger.Info("Transcription completed successfully",
@@ -113,15 +104,27 @@ func (wm *WorkerManager) processTranscriberTask(ctx context.Context, qm *QueueMa
 		CreatedAt:     time.Now(),
 	}
 
-	select {
-	case <-ctx.Done():
-		wm.logger.Info("Context cancelled while sending transcriber result",
-			zap.String("task_id", task.ID),
-		)
-		return
-	case qm.TranscriberResults <- result:
-		wm.logger.Info("Sent transcriber result",
-			zap.String("task_id", task.ID),
+	// Отправляем результат через персональный канал ожидающей горутины
+	wm.sendTranscriberResult(ctx, qm, task.ID, result)
+}
+
+// sendTranscriberResult отправляет результат транскрибации через персональный канал
+func (wm *WorkerManager) sendTranscriberResult(ctx context.Context, qm *QueueManager, taskID string, result TranscriberResult) {
+	if waiter, ok := qm.transcriberWaiters.LoadAndDelete(taskID); ok {
+		resultChan := waiter.(chan TranscriberResult)
+		select {
+		case resultChan <- result:
+			wm.logger.Info("Sent transcriber result to waiter",
+				zap.String("task_id", taskID),
+			)
+		case <-ctx.Done():
+			wm.logger.Info("Context cancelled while sending transcriber result to waiter",
+				zap.String("task_id", taskID),
+			)
+		}
+	} else {
+		wm.logger.Warn("No waiter found for transcriber result",
+			zap.String("task_id", taskID),
 		)
 	}
 }
@@ -160,18 +163,9 @@ func (wm *WorkerManager) processLLMTask(ctx context.Context, qm *QueueManager, t
 			CreatedAt: time.Now(),
 		}
 
-		select {
-		case <-ctx.Done():
-			wm.logger.Info("Context cancelled while sending LLM error result",
-				zap.String("task_id", task.ID),
-			)
-			return
-		case qm.LLMResults <- result:
-			wm.logger.Info("Sent LLM error result",
-				zap.String("task_id", task.ID),
-			)
-			return
-		}
+		// Отправляем результат через персональный канал ожидающей горутины
+		wm.sendLLMResult(ctx, qm, task.ID, result)
+		return
 	}
 
 	wm.logger.Info("LLM task completed successfully",
@@ -187,15 +181,27 @@ func (wm *WorkerManager) processLLMTask(ctx context.Context, qm *QueueManager, t
 		CreatedAt: time.Now(),
 	}
 
-	select {
-	case <-ctx.Done():
-		wm.logger.Info("Context cancelled while sending LLM result",
-			zap.String("task_id", task.ID),
-		)
-		return
-	case qm.LLMResults <- result:
-		wm.logger.Info("Sent LLM result",
-			zap.String("task_id", task.ID),
+	// Отправляем результат через персональный канал ожидающей горутины
+	wm.sendLLMResult(ctx, qm, task.ID, result)
+}
+
+// sendLLMResult отправляет результат LLM через персональный канал
+func (wm *WorkerManager) sendLLMResult(ctx context.Context, qm *QueueManager, taskID string, result LLMResult) {
+	if waiter, ok := qm.llmWaiters.LoadAndDelete(taskID); ok {
+		resultChan := waiter.(chan LLMResult)
+		select {
+		case resultChan <- result:
+			wm.logger.Info("Sent LLM result to waiter",
+				zap.String("task_id", taskID),
+			)
+		case <-ctx.Done():
+			wm.logger.Info("Context cancelled while sending LLM result to waiter",
+				zap.String("task_id", taskID),
+			)
+		}
+	} else {
+		wm.logger.Warn("No waiter found for LLM result",
+			zap.String("task_id", taskID),
 		)
 	}
 }
@@ -223,18 +229,9 @@ func (wm *WorkerManager) processEmbeddingTask(ctx context.Context, qm *QueueMana
 			CreatedAt: time.Now(),
 		}
 
-		select {
-		case <-ctx.Done():
-			wm.logger.Info("Context cancelled while sending embedding error result",
-				zap.String("task_id", task.ID),
-			)
-			return
-		case qm.EmbeddingResults <- result:
-			wm.logger.Info("Sent embedding error result",
-				zap.String("task_id", task.ID),
-			)
-			return
-		}
+		// Отправляем результат через персональный канал ожидающей горутины
+		wm.sendEmbeddingResult(ctx, qm, task.ID, result)
+		return
 	}
 
 	wm.logger.Info("Embedding generated successfully",
@@ -250,15 +247,27 @@ func (wm *WorkerManager) processEmbeddingTask(ctx context.Context, qm *QueueMana
 		CreatedAt: time.Now(),
 	}
 
-	select {
-	case <-ctx.Done():
-		wm.logger.Info("Context cancelled while sending embedding result",
-			zap.String("task_id", task.ID),
-		)
-		return
-	case qm.EmbeddingResults <- result:
-		wm.logger.Info("Sent embedding result",
-			zap.String("task_id", task.ID),
+	// Отправляем результат через персональный канал ожидающей горутины
+	wm.sendEmbeddingResult(ctx, qm, task.ID, result)
+}
+
+// sendEmbeddingResult отправляет результат эмбеддинга через персональный канал
+func (wm *WorkerManager) sendEmbeddingResult(ctx context.Context, qm *QueueManager, taskID string, result EmbeddingResult) {
+	if waiter, ok := qm.embeddingWaiters.LoadAndDelete(taskID); ok {
+		resultChan := waiter.(chan EmbeddingResult)
+		select {
+		case resultChan <- result:
+			wm.logger.Info("Sent embedding result to waiter",
+				zap.String("task_id", taskID),
+			)
+		case <-ctx.Done():
+			wm.logger.Info("Context cancelled while sending embedding result to waiter",
+				zap.String("task_id", taskID),
+			)
+		}
+	} else {
+		wm.logger.Warn("No waiter found for embedding result",
+			zap.String("task_id", taskID),
 		)
 	}
 }
